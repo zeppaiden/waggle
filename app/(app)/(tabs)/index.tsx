@@ -1,130 +1,190 @@
-import { useState, useRef } from 'react';
-import { Dimensions, Platform } from 'react-native';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { useState } from 'react';
+import { Platform, Modal, ActivityIndicator } from 'react-native';
 import { Stack, XStack, YStack, Text, Button } from 'tamagui';
-import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Theme } from 'tamagui';
+import { VideoCard } from '@/components/video-card/VideoCard';
+import { PetProfile } from '@/components/pet-profile/PetProfile';
+import { VideoItem } from '@/types/pets';
+import { LAYOUT } from '@/constants/layout';
 
-const { width: WINDOW_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = WINDOW_WIDTH - 32;
-const CARD_HEIGHT = CARD_WIDTH * 1.5; // 2:3 aspect ratio for portrait videos
-
-interface VideoItem {
-  id: string;
-  url: string;
-  petName: string;
-  age: number;
-  distance: string;
-  score: number;
-}
-
-const CURRENT_VIDEO: VideoItem = {
-  id: '1',
-  url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  petName: 'Max',
-  age: 3,
-  distance: '2.5 km',
-  score: 9.2,
-};
+// Sample video data - in a real app, this would come from an API
+const VIDEOS: VideoItem[] = [
+  {
+    id: '1',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    petName: 'Max',
+    age: 3,
+    distance: '2.5 km',
+    score: 9.2,
+    breed: 'Golden Retriever',
+    location: 'New York',
+    description: 'Friendly and energetic pup who loves to play fetch and go on long walks. Great with kids and other dogs!',
+    interests: ['Fetch', 'Swimming', 'Park Visits', 'Treats'],
+    owner: {
+      name: 'Sarah',
+      verified: true,
+    },
+    photos: [
+      'https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=500',
+      'https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?q=80&w=500',
+      'https://images.unsplash.com/photo-1518717758536-85ae29035b6d?q=80&w=500',
+    ],
+  },
+  {
+    id: '2',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    petName: 'Luna',
+    age: 2,
+    distance: '3.1 km',
+    score: 8.9,
+    breed: 'Persian Cat',
+    location: 'Brooklyn',
+    description: 'A gentle and affectionate cat who loves cuddles. Perfectly house-trained and great with other cats.',
+    interests: ['Napping', 'Bird Watching', 'Laser Games', 'Treats'],
+    owner: {
+      name: 'Emma',
+      verified: true,
+    },
+    photos: [
+      'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=500',
+      'https://images.unsplash.com/photo-1573865526739-10659fec78a5?q=80&w=500',
+      'https://images.unsplash.com/photo-1492370284958-c20b15c692d2?q=80&w=500',
+    ],
+  },
+  {
+    id: '3',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    petName: 'Charlie',
+    age: 4,
+    distance: '1.8 km',
+    score: 9.5,
+    breed: 'French Bulldog',
+    location: 'Manhattan',
+    description: 'Playful and social Frenchie looking for friends. Loves belly rubs and short walks in the park.',
+    interests: ['Belly Rubs', 'Short Walks', 'Toys', 'Naps'],
+    owner: {
+      name: 'Mike',
+      verified: false,
+    },
+    photos: [
+      'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?q=80&w=500',
+      'https://images.unsplash.com/photo-1575859431774-2e57ed632664?q=80&w=500',
+      'https://images.unsplash.com/photo-1620189507187-4ba2422b5979?q=80&w=500',
+    ],
+  },
+];
 
 export default function VideoTimelineScreen() {
-  const videoRef = useRef<Video>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [showProfile, setShowProfile] = useState(false);
 
-  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      setIsLoading(false);
+  // Guard against empty video list
+  if (VIDEOS.length === 0) {
+    return (
+      <Theme name="light">
+        <YStack f={1} ai="center" jc="center" space="$4">
+          <Text fontSize={20} color="$gray11">
+            No pets available right now
+          </Text>
+          <Text fontSize={16} color="$gray10">
+            Check back later!
+          </Text>
+        </YStack>
+      </Theme>
+    );
+  }
+
+  const currentVideo = VIDEOS[currentIndex];
+
+  const loadNextVideo = () => {
+    setIsLoading(true);
+    if (currentIndex < VIDEOS.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      setCurrentIndex(0);
     }
   };
 
   const handleDislike = () => {
-    console.log('Disliked video:', CURRENT_VIDEO.id);
+    loadNextVideo();
   };
 
   const handleLike = () => {
-    console.log('Liked video:', CURRENT_VIDEO.id);
+    setShowProfile(true);
+  };
+
+  const handleContinue = () => {
+    setShowProfile(false);
+    loadNextVideo();
   };
 
   return (
-    <Theme>
-      <YStack f={1} backgroundColor="$background" pt={Platform.OS === 'ios' ? 50 : 30}>
-        {/* Header */}
-        <XStack px="$4" py="$3" ai="center" space="$2" mb="$4">
-          <Text fontSize={28} fontWeight="600" color="$color">Pets Nearby</Text>
-          <IconSymbol name="location.fill" size={20} color="$secondary" />
+    <Theme name="light">
+      <YStack f={1} pt={Platform.OS === 'ios' ? 60 : 40} bg="$background">
+        <XStack mb="$4" px="$4" ai="center" jc="space-between">
+          <Text fontSize={24} fontWeight="bold">
+            For You
+          </Text>
         </XStack>
 
-        {/* Card Container */}
-        <YStack f={1} ai="center" jc="flex-start" pb="$10">
-          <Stack
-            width={CARD_WIDTH}
-            height={CARD_HEIGHT}
-            borderRadius={20}
-            overflow="hidden"
-            backgroundColor="$card"
-            shadowColor="$color"
-            shadowOffset={{ width: 0, height: 2 }}
-            shadowOpacity={0.1}
-            shadowRadius={8}
-          >
-            {/* Video */}
-            <Video
-              ref={videoRef}
-              source={{ uri: CURRENT_VIDEO.url }}
-              style={{ width: '100%', height: '100%' }}
-              resizeMode={ResizeMode.COVER}
-              isLooping
-              shouldPlay
-              isMuted={false}
-              onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+        <YStack f={1} ai="center" jc="flex-start">
+          <Stack w={LAYOUT.CARD.WIDTH} h={LAYOUT.CARD.HEIGHT} position="relative">
+            <VideoCard
+              video={currentVideo}
+              onLoadingChange={setIsLoading}
             />
-
-            {/* Pet Info Overlay */}
-            <Stack
-              position="absolute"
-              bottom={0}
-              left={0}
-              right={0}
-              backgroundColor="rgba(0,0,0,0.4)"
-              py="$3"
-              px="$4"
-            >
-              <XStack jc="space-between" ai="center">
-                <YStack>
-                  <Text color="white" fontSize={20} fontWeight="600">
-                    {CURRENT_VIDEO.petName}, {CURRENT_VIDEO.age}
-                  </Text>
-                  <Text color="white" fontSize={14} o={0.9}>
-                    {CURRENT_VIDEO.distance}
-                  </Text>
-                </YStack>
-                <Text color="white" fontSize={20} fontWeight="600">
-                  {CURRENT_VIDEO.score}
-                </Text>
-              </XStack>
-            </Stack>
+            {isLoading && (
+              <Stack
+                position="absolute"
+                top={0}
+                left={0}
+                right={0}
+                bottom={0}
+                ai="center"
+                jc="center"
+                backgroundColor="rgba(0,0,0,0.3)"
+              >
+                <ActivityIndicator size="large" color="white" />
+              </Stack>
+            )}
           </Stack>
 
-          {/* Action Buttons */}
-          <XStack mt="$6" space="$6">
+          <XStack mt="$4" space="$4">
             <Button
-              size="$7"
+              size="$6"
               circular
-              backgroundColor="#FF4C4C"
               onPress={handleDislike}
-              pressStyle={{ opacity: 0.7 }}
-              icon={<IconSymbol name="xmark" size={32} color="white" />}
-            />
+              bg="$red10"
+              disabled={isLoading}
+              o={isLoading ? 0.5 : 1}
+            >
+              <Text fontSize={24}>❌</Text>
+            </Button>
             <Button
-              size="$7"
+              size="$6"
               circular
-              backgroundColor="$primary"
               onPress={handleLike}
-              pressStyle={{ opacity: 0.7 }}
-              icon={<IconSymbol name="pawprint.fill" size={32} color="white" />}
-            />
+              bg="$green10"
+              disabled={isLoading}
+              o={isLoading ? 0.5 : 1}
+            >
+              <Text fontSize={24}>🐾</Text>
+            </Button>
           </XStack>
         </YStack>
+
+        <Modal
+          visible={showProfile}
+          animationType="slide"
+          onRequestClose={() => setShowProfile(false)}
+        >
+          <PetProfile
+            pet={currentVideo}
+            onClose={() => setShowProfile(false)}
+            onContinue={handleContinue}
+          />
+        </Modal>
       </YStack>
     </Theme>
   );
