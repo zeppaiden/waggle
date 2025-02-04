@@ -1,76 +1,35 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { StyleSheet, Dimensions, FlatList, View, ViewToken, ActivityIndicator } from 'react-native';
+import { useState, useRef } from 'react';
+import { Dimensions, Platform } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { Stack, XStack, YStack, Text, Button } from 'tamagui';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Theme } from 'tamagui';
 
-const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
+const { width: WINDOW_WIDTH } = Dimensions.get('window');
+const CARD_WIDTH = WINDOW_WIDTH - 32;
+const CARD_HEIGHT = CARD_WIDTH * 1.5; // 2:3 aspect ratio for portrait videos
 
 interface VideoItem {
   id: string;
   url: string;
+  petName: string;
+  age: number;
+  distance: string;
+  score: number;
 }
 
-interface VideoItemProps {
-  item: VideoItem;
-  isVisible: boolean;
-}
+const CURRENT_VIDEO: VideoItem = {
+  id: '1',
+  url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+  petName: 'Max',
+  age: 3,
+  distance: '2.5 km',
+  score: 9.2,
+};
 
-// Sample video data
-const VIDEOS: VideoItem[] = [
-  {
-    id: '1',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  },
-  {
-    id: '2',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-  },
-  {
-    id: '3',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  },
-  {
-    id: '4',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-  },
-  {
-    id: '5',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-  },
-  {
-    id: '6',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
-  },
-  {
-    id: '7',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
-  },
-  {
-    id: '8',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-  },
-  {
-    id: '9',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4',
-  },
-  {
-    id: '10',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-  },
-];
-
-const VideoPlayer = ({ item, isVisible }: VideoItemProps) => {
+export default function VideoTimelineScreen() {
   const videoRef = useRef<Video>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      if (isVisible) {
-        videoRef.current.playAsync();
-      } else {
-        videoRef.current.pauseAsync();
-      }
-    }
-  }, [isVisible]);
 
   const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
@@ -78,83 +37,95 @@ const VideoPlayer = ({ item, isVisible }: VideoItemProps) => {
     }
   };
 
-  return (
-    <View style={styles.videoContainer}>
-      <Video
-        ref={videoRef}
-        source={{ uri: item.url }}
-        style={styles.video}
-        resizeMode={ResizeMode.COVER}
-        isLooping
-        shouldPlay={isVisible}
-        isMuted={false}
-        onPlaybackStatusUpdate={onPlaybackStatusUpdate}
-      />
-      {isLoading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#fff" />
-        </View>
-      )}
-    </View>
-  );
-};
-
-export default function VideoTimelineScreen() {
-  const [visibleIndex, setVisibleIndex] = useState(0);
-  const flatListRef = useRef<FlatList>(null);
-
-  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    if (viewableItems.length > 0) {
-      setVisibleIndex(viewableItems[0].index ?? 0);
-    }
-  }, []);
-
-  const viewabilityConfig = {
-    itemVisiblePercentThreshold: 50,
+  const handleDislike = () => {
+    console.log('Disliked video:', CURRENT_VIDEO.id);
   };
 
-  const renderItem = ({ item, index }: { item: VideoItem; index: number }) => (
-    <VideoPlayer
-      item={item}
-      isVisible={index === visibleIndex}
-    />
-  );
+  const handleLike = () => {
+    console.log('Liked video:', CURRENT_VIDEO.id);
+  };
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        ref={flatListRef}
-        data={VIDEOS}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        pagingEnabled
-        showsVerticalScrollIndicator={false}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        snapToInterval={WINDOW_HEIGHT}
-        decelerationRate="fast"
-        snapToAlignment="start"
-      />
-    </View>
+    <Theme>
+      <YStack f={1} backgroundColor="$background" pt={Platform.OS === 'ios' ? 50 : 30}>
+        {/* Header */}
+        <XStack px="$4" py="$3" ai="center" space="$2" mb="$4">
+          <Text fontSize={28} fontWeight="600" color="$color">Pets Nearby</Text>
+          <IconSymbol name="location.fill" size={20} color="$secondary" />
+        </XStack>
+
+        {/* Card Container */}
+        <YStack f={1} ai="center" jc="flex-start" pb="$10">
+          <Stack
+            width={CARD_WIDTH}
+            height={CARD_HEIGHT}
+            borderRadius={20}
+            overflow="hidden"
+            backgroundColor="$card"
+            shadowColor="$color"
+            shadowOffset={{ width: 0, height: 2 }}
+            shadowOpacity={0.1}
+            shadowRadius={8}
+          >
+            {/* Video */}
+            <Video
+              ref={videoRef}
+              source={{ uri: CURRENT_VIDEO.url }}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode={ResizeMode.COVER}
+              isLooping
+              shouldPlay
+              isMuted={false}
+              onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+            />
+
+            {/* Pet Info Overlay */}
+            <Stack
+              position="absolute"
+              bottom={0}
+              left={0}
+              right={0}
+              backgroundColor="rgba(0,0,0,0.4)"
+              py="$3"
+              px="$4"
+            >
+              <XStack jc="space-between" ai="center">
+                <YStack>
+                  <Text color="white" fontSize={20} fontWeight="600">
+                    {CURRENT_VIDEO.petName}, {CURRENT_VIDEO.age}
+                  </Text>
+                  <Text color="white" fontSize={14} o={0.9}>
+                    {CURRENT_VIDEO.distance}
+                  </Text>
+                </YStack>
+                <Text color="white" fontSize={20} fontWeight="600">
+                  {CURRENT_VIDEO.score}
+                </Text>
+              </XStack>
+            </Stack>
+          </Stack>
+
+          {/* Action Buttons */}
+          <XStack mt="$6" space="$6">
+            <Button
+              size="$7"
+              circular
+              backgroundColor="#FF4C4C"
+              onPress={handleDislike}
+              pressStyle={{ opacity: 0.7 }}
+              icon={<IconSymbol name="xmark" size={32} color="white" />}
+            />
+            <Button
+              size="$7"
+              circular
+              backgroundColor="$primary"
+              onPress={handleLike}
+              pressStyle={{ opacity: 0.7 }}
+              icon={<IconSymbol name="pawprint.fill" size={32} color="white" />}
+            />
+          </XStack>
+        </YStack>
+      </YStack>
+    </Theme>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  videoContainer: {
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
-  },
-  video: {
-    flex: 1,
-  },
-  loadingContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-});
