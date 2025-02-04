@@ -1,6 +1,7 @@
-import { Platform } from 'react-native';
+import { Platform, Image as RNImage } from 'react-native';
 import { Stack, XStack, YStack, Text, Button, ScrollView, Image } from 'tamagui';
 import { VideoItem } from '../../types/pets';
+import { LAYOUT } from '../../constants/layout';
 
 interface PetProfileProps {
   pet: VideoItem;
@@ -10,60 +11,92 @@ interface PetProfileProps {
 
 export function PetProfile({ pet, onClose, onContinue }: PetProfileProps) {
   return (
-    <YStack f={1} bg="$background" pt={Platform.OS === 'ios' ? 60 : 40}>
-      <ScrollView bounces={false}>
-        <YStack space="$4" p="$4">
-          <Button
-            size="$4"
-            alignSelf="flex-end"
-            onPress={onClose}
-          >
-            <Text fontSize={20}>✕</Text>
-          </Button>
+    <YStack f={1} bg="$background">
+      {/* Main Image */}
+      <Stack position="relative" height={LAYOUT.CARD.HEIGHT * 0.7}>
+        <Image
+          source={{ uri: pet.photos[0] }}
+          width="100%"
+          height="100%"
+          resizeMode="cover"
+        />
+        <Button
+          size="$4"
+          position="absolute"
+          top={Platform.OS === 'ios' ? 60 : 20}
+          left={20}
+          circular
+          onPress={onClose}
+          bg="$background"
+          opacity={0.9}
+        >
+          <Text fontSize={20}>←</Text>
+        </Button>
+      </Stack>
 
-          <XStack space="$2">
-            {pet.photos.map((photo, index) => (
-              <Image
-                key={index}
-                source={{ uri: photo }}
-                width={100}
-                height={100}
-                borderRadius="$2"
-              />
-            ))}
-          </XStack>
+      {/* Thumbnail Images */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} px="$4" mt="$2">
+        <XStack space="$2">
+          {pet.photos.slice(1).map((photo, index) => (
+            <Image
+              key={index}
+              source={{ uri: photo }}
+              width={80}
+              height={80}
+              borderRadius="$2"
+            />
+          ))}
+        </XStack>
+      </ScrollView>
 
-          <YStack space="$2">
-            <XStack ai="center" space="$2">
+      {/* Profile Info */}
+      <ScrollView bounces={false} px="$4" mt="$4">
+        <YStack space="$4">
+          {/* Name, Age and Location */}
+          <YStack>
+            <XStack space="$2" ai="center">
               <Text fontSize={28} fontWeight="bold">
                 {pet.petName}
               </Text>
-              <Text fontSize={24} color="$gray10">
-                {pet.age} years
+              <Text fontSize={24} color="$gray11">
+                {pet.age}
               </Text>
+              {pet.owner.verified && (
+                <Text fontSize={20} color="$blue10">
+                  ✓
+                </Text>
+              )}
             </XStack>
-
-            <XStack ai="center" space="$2">
-              <Text fontSize={18} color="$gray11">
+            <XStack space="$2" ai="center" mt="$1">
+              <Text fontSize={16} color="$gray11">
                 📍 {pet.location}
               </Text>
-              <Text fontSize={18} color="$gray11">
+              <Text fontSize={16} color="$gray11">
                 • {pet.breed}
               </Text>
             </XStack>
           </YStack>
 
-          <YStack space="$2">
-            <Text fontSize={20} fontWeight="bold">
-              About
-            </Text>
+          {/* Match Score */}
+          <XStack ai="center" space="$2">
             <Text fontSize={16} color="$gray11">
-              {pet.description}
+              Match Score
             </Text>
-          </YStack>
+            <Stack
+              backgroundColor="$green5"
+              px="$2"
+              py="$1"
+              br="$4"
+            >
+              <Text color="$green10" fontWeight="bold">
+                {pet.score}
+              </Text>
+            </Stack>
+          </XStack>
 
+          {/* Interests */}
           <YStack space="$2">
-            <Text fontSize={20} fontWeight="bold">
+            <Text fontSize={16} fontWeight="bold" color="$gray11">
               Interests
             </Text>
             <XStack flexWrap="wrap" gap="$2">
@@ -75,37 +108,43 @@ export function PetProfile({ pet, onClose, onContinue }: PetProfileProps) {
                   py="$2"
                   br="$4"
                 >
-                  <Text fontSize={14}>{interest}</Text>
+                  <Text fontSize={14} color="$gray11">
+                    {interest}
+                  </Text>
                 </Stack>
               ))}
             </XStack>
           </YStack>
 
+          {/* About */}
           <YStack space="$2">
-            <Text fontSize={20} fontWeight="bold">
-              Owner
+            <Text fontSize={16} fontWeight="bold" color="$gray11">
+              About
             </Text>
-            <XStack ai="center" space="$2">
-              <Text fontSize={16}>
-                {pet.owner.name}
-              </Text>
-              {pet.owner.verified && (
-                <Text fontSize={16} color="$blue10">
-                  ✓ Verified
-                </Text>
-              )}
-            </XStack>
+            <Text fontSize={14} color="$gray11">
+              {pet.description}
+            </Text>
           </YStack>
 
-          <Button
-            size="$6"
-            bg="$green10"
-            onPress={onContinue}
-          >
-            <Text color="white" fontSize={18}>
-              Continue Browsing
-            </Text>
-          </Button>
+          {/* Action Buttons */}
+          <XStack mt="$4" mb="$6" space="$4" jc="center">
+            <Button
+              size="$6"
+              circular
+              onPress={onClose}
+              bg="$red10"
+            >
+              <Text fontSize={24}>❌</Text>
+            </Button>
+            <Button
+              size="$6"
+              circular
+              onPress={onContinue}
+              bg="$green10"
+            >
+              <Text fontSize={24}>🐾</Text>
+            </Button>
+          </XStack>
         </YStack>
       </ScrollView>
     </YStack>
