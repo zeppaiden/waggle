@@ -1,4 +1,8 @@
-import { StyleSheet, Image, Platform } from 'react-native';
+import { StyleSheet, Image, Platform, TouchableOpacity } from 'react-native';
+import { router } from 'expo-router';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/configs/firebase';
+import { Colors } from '@/constants/colors-theme';
 
 import { Collapsible } from '@/components/Collapsible';
 import { ExternalLink } from '@/components/ExternalLink';
@@ -8,6 +12,15 @@ import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
 export default function TabTwoScreen() {
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.replace('/(auth)/sign-in');
+    } catch (error: any) {
+      console.error('Logout error:', error);
+    }
+  };
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
@@ -19,8 +32,13 @@ export default function TabTwoScreen() {
           style={styles.headerImage}
         />
       }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Explore</ThemedText>
+      <ThemedView style={styles.header}>
+        <ThemedView style={styles.titleContainer}>
+          <ThemedText type="title">Explore</ThemedText>
+        </ThemedView>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+          <ThemedText style={styles.logoutText}>Logout</ThemedText>
+        </TouchableOpacity>
       </ThemedView>
       <ThemedText>This app includes example code to help you get started.</ThemedText>
       <Collapsible title="File-based routing">
@@ -105,5 +123,17 @@ const styles = StyleSheet.create({
   titleContainer: {
     flexDirection: 'row',
     gap: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  logoutButton: {
+    padding: 10,
+  },
+  logoutText: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

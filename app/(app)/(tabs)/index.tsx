@@ -1,109 +1,160 @@
-import { Image, StyleSheet, Platform, Alert } from 'react-native';
-import { Button } from 'react-native-paper';
-import { router } from 'expo-router';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { StyleSheet, Dimensions, FlatList, View, ViewToken, ActivityIndicator } from 'react-native';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { useAuth } from '@/contexts/auth';
+const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
-export default function HomeScreen() {
-  const { user, signOut } = useAuth();
+interface VideoItem {
+  id: string;
+  url: string;
+}
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      Alert.alert('Success', 'You have been signed out');
-      router.replace('/(auth)/sign-in');
-    } catch (error: any) {
-      Alert.alert('Error', error.message);
+interface VideoItemProps {
+  item: VideoItem;
+  isVisible: boolean;
+}
+
+// Sample video data
+const VIDEOS: VideoItem[] = [
+  {
+    id: '1',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+  },
+  {
+    id: '2',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+  },
+  {
+    id: '3',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+  },
+  {
+    id: '4',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+  },
+  {
+    id: '5',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+  },
+  {
+    id: '6',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+  },
+  {
+    id: '7',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
+  },
+  {
+    id: '8',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+  },
+  {
+    id: '9',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4',
+  },
+  {
+    id: '10',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+  },
+];
+
+const VideoPlayer = ({ item, isVisible }: VideoItemProps) => {
+  const videoRef = useRef<Video>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      if (isVisible) {
+        videoRef.current.playAsync();
+      } else {
+        videoRef.current.pauseAsync();
+      }
+    }
+  }, [isVisible]);
+
+  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      setIsLoading(false);
     }
   };
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      
-      <ThemedView style={styles.userContainer}>
-        <ThemedText>Signed in as: {user?.email}</ThemedText>
-        <Button 
-          mode="outlined" 
-          onPress={handleSignOut}
-          style={styles.button}
-        >
-          Sign Out
-        </Button>
-      </ThemedView>
+    <View style={styles.videoContainer}>
+      <Video
+        ref={videoRef}
+        source={{ uri: item.url }}
+        style={styles.video}
+        resizeMode={ResizeMode.COVER}
+        isLooping
+        shouldPlay={isVisible}
+        isMuted={false}
+        onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+      />
+      {isLoading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      )}
+    </View>
+  );
+};
 
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+export default function VideoTimelineScreen() {
+  const [visibleIndex, setVisibleIndex] = useState(0);
+  const flatListRef = useRef<FlatList>(null);
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    if (viewableItems.length > 0) {
+      setVisibleIndex(viewableItems[0].index ?? 0);
+    }
+  }, []);
+
+  const viewabilityConfig = {
+    itemVisiblePercentThreshold: 50,
+  };
+
+  const renderItem = ({ item, index }: { item: VideoItem; index: number }) => (
+    <VideoPlayer
+      item={item}
+      isVisible={index === visibleIndex}
+    />
+  );
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        ref={flatListRef}
+        data={VIDEOS}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        pagingEnabled
+        showsVerticalScrollIndicator={false}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        snapToInterval={WINDOW_HEIGHT}
+        decelerationRate="fast"
+        snapToAlignment="start"
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  videoContainer: {
+    width: WINDOW_WIDTH,
+    height: WINDOW_HEIGHT,
+  },
+  video: {
+    flex: 1,
+  },
+  loadingContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-  },
-  userContainer: {
-    marginVertical: 16,
-    alignItems: 'center',
-    gap: 8,
-  },
-  button: {
-    minWidth: 120,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
 });
