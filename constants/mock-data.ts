@@ -13,12 +13,12 @@ export type Pet = {
     verified: boolean;
   };
   photos: string[];
-  species: 'dog' | 'cat' | 'other';
+  species: 'dog' | 'cat' | 'bunny' | 'other';
   size: 'small' | 'medium' | 'large';
 };
 
 export type FavoriteFilters = {
-  species?: ('dog' | 'cat' | 'other')[];
+  species?: ('dog' | 'cat' | 'bunny' | 'other')[];
   size?: ('small' | 'medium' | 'large')[];
   minMatchScore?: number;
   maxDistance?: number;
@@ -27,7 +27,8 @@ export type FavoriteFilters = {
 export const MOCK_PETS: Pet[] = [
   {
     id: '1',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    // videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    videoUrl: 'https://stream.mux.com/oZtoho3dz2lW017OMTr20002lWLkvy9dnAS6WlDmRW46Z8.m3u8',
     name: 'Max',
     age: 3,
     location: '2.5 km away',

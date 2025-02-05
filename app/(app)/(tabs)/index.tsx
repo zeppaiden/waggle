@@ -1,6 +1,6 @@
-import { View, StyleSheet, Dimensions, Image } from 'react-native';
-import { useCallback, useState, useEffect, useMemo } from 'react';
-import { Video, ResizeMode } from 'expo-av';
+import { View, StyleSheet, Dimensions, Image, SafeAreaView, Pressable, ActivityIndicator } from 'react-native';
+import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Text } from '@/components/themed';
 import Animated, {
   useSharedValue,
@@ -20,19 +20,106 @@ import {
 import { Colors } from '@/constants/colors-theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useRouter } from 'expo-router';
-import { MOCK_PETS, type Pet } from '@/constants/mock-data';
+import { usePets } from '@/hooks/usePets';
+import { Ionicons } from '@expo/vector-icons';
+import { useFavorites } from '@/hooks/useFavorites';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.5;
 const SWIPE_UP_THRESHOLD = SCREEN_HEIGHT * 0.2;
 
+// TODO: Replace with actual user ID from authentication
+const TEMP_USER_ID = 'user123';
+
 interface PetCardProps {
-  pet: Pet;
+  pet: any;
   style: any;
   isNext?: boolean;
 }
 
+type VideoCardProps = {
+  videoUrl: string;
+  shouldPlay?: boolean;
+};
+
+function VideoCard({ videoUrl, shouldPlay = true }: VideoCardProps) {
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const videoRef = useRef<Video | null>(null);
+
+  // Reset states when URL or playback state changes
+  useEffect(() => {
+    setIsVideoLoaded(false);
+    setHasError(false);
+  }, [videoUrl, shouldPlay]);
+
+  // Stop video playback when component unmounts or shouldPlay changes to false
+  useEffect(() => {
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.stopAsync();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!shouldPlay && videoRef.current) {
+      videoRef.current.stopAsync();
+    }
+  }, [shouldPlay]);
+
+  const handleLoad = useCallback(() => {
+    console.log('Video loaded:', videoUrl, 'shouldPlay:', shouldPlay);
+    setIsVideoLoaded(true);
+    setHasError(false);
+  }, [videoUrl, shouldPlay]);
+
+  const handleError = useCallback((error: string | undefined) => {
+    console.error('Error loading video:', videoUrl, error);
+    setHasError(true);
+    setIsVideoLoaded(false);
+  }, [videoUrl]);
+
+  // Preload video without playing
+  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+    if (status.isLoaded && !isVideoLoaded) {
+      handleLoad();
+    }
+  }, [handleLoad, isVideoLoaded]);
+  
+  return (
+    <View style={[StyleSheet.absoluteFill, styles.videoContainer]}>
+      <Video
+        ref={videoRef}
+        source={{ uri: videoUrl }}
+        style={[
+          StyleSheet.absoluteFill,
+          !isVideoLoaded && { opacity: 0 }
+        ]}
+        resizeMode={ResizeMode.COVER}
+        shouldPlay={shouldPlay && isVideoLoaded}
+        isLooping={true}
+        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+        onError={handleError}
+        isMuted={true}
+      />
+      {(!isVideoLoaded && !hasError) && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      )}
+      {hasError && (
+        <View style={styles.errorOverlay}>
+          <Ionicons name="alert-circle-outline" size={32} color="#fff" />
+          <Text style={styles.errorText}>Failed to load video</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function PetCard({ pet, style, isNext = false }: PetCardProps) {
+  const router = useRouter();
   const viewStyle = useMemo(() => [
     styles.card,
     style
@@ -40,13 +127,13 @@ function PetCard({ pet, style, isNext = false }: PetCardProps) {
 
   return (
     <Animated.View style={viewStyle}>
-      <Video
-        source={{ uri: pet.videoUrl }}
-        style={styles.video}
-        shouldPlay={!isNext}
-        isLooping
-        resizeMode={ResizeMode.COVER}
-      />
+      <VideoCard videoUrl={pet.videoUrl} shouldPlay={!isNext} />
+      <Pressable 
+        style={styles.infoButton}
+        onPress={() => router.push(`/pet/${pet.id}`)}
+      >
+        <Ionicons name="information-circle" size={32} color="#123524" />
+      </Pressable>
       <View style={styles.overlay}>
         <Text style={styles.name}>{pet.name}, {pet.age}</Text>
         <Text style={styles.location}>{pet.location}</Text>
@@ -69,6 +156,8 @@ export default function DiscoverScreen() {
   const colorScheme = useColorScheme();
   const theme = colorScheme ?? 'light';
   const router = useRouter();
+  const { pets, loading, error } = usePets();
+  const { addFavorite, isFavorite } = useFavorites(TEMP_USER_ID);
 
   const x = useSharedValue(0);
   const y = useSharedValue(0);
@@ -76,22 +165,42 @@ export default function DiscoverScreen() {
   const scale = useSharedValue(0.9);
 
   const handleSwipeLeft = useCallback(() => {
-    setCurrentIndex(prev => (prev + 1) % MOCK_PETS.length);
-    // Reset values with smooth spring animation
-    x.value = withSpring(0, { damping: 20, stiffness: 200 });
+    // Animate the card off screen to the left
+    x.value = withSpring(-SCREEN_WIDTH * 1.5, { damping: 20, stiffness: 200 });
     y.value = withSpring(0, { damping: 20, stiffness: 200 });
-    rotation.value = withSpring(0, { damping: 20, stiffness: 200 });
-    scale.value = withSpring(1, { damping: 20, stiffness: 200 });
-  }, []);
+    rotation.value = withSpring(-10, { damping: 20, stiffness: 200 });
+    
+    // After animation, reset and update index
+    setTimeout(() => {
+      setCurrentIndex(prev => (prev + 1) % pets.length);
+      x.value = 0;
+      y.value = 0;
+      rotation.value = 0;
+      scale.value = 0.9;
+    }, 200);
+  }, [pets.length]);
 
   const handleSwipeRight = useCallback(() => {
-    setCurrentIndex(prev => (prev + 1) % MOCK_PETS.length);
-    // Reset values with smooth spring animation
-    x.value = withSpring(0, { damping: 20, stiffness: 200 });
+    // Add current pet to favorites
+    const currentPet = pets[currentIndex];
+    if (currentPet && !isFavorite(currentPet.id)) {
+      addFavorite(currentPet.id);
+    }
+
+    // Animate the card off screen to the right
+    x.value = withSpring(SCREEN_WIDTH * 1.5, { damping: 20, stiffness: 200 });
     y.value = withSpring(0, { damping: 20, stiffness: 200 });
-    rotation.value = withSpring(0, { damping: 20, stiffness: 200 });
-    scale.value = withSpring(1, { damping: 20, stiffness: 200 });
-  }, []);
+    rotation.value = withSpring(10, { damping: 20, stiffness: 200 });
+    
+    // After animation, reset and update index
+    setTimeout(() => {
+      setCurrentIndex(prev => (prev + 1) % pets.length);
+      x.value = 0;
+      y.value = 0;
+      rotation.value = 0;
+      scale.value = 0.9;
+    }, 200);
+  }, [pets.length, currentIndex, addFavorite, isFavorite]);
 
   const handleSwipeUp = useCallback((petId: string) => {
     // Navigate immediately
@@ -119,7 +228,7 @@ export default function DiscoverScreen() {
     .onEnd((event) => {
       if (Math.abs(event.translationY) > SWIPE_UP_THRESHOLD && event.velocityY < -500) {
         // Swipe up - navigate to pet profile
-        runOnJS(handleSwipeUp)(MOCK_PETS[currentIndex].id);
+        runOnJS(handleSwipeUp)(pets[currentIndex].id);
       } else if (Math.abs(event.translationX) > SWIPE_THRESHOLD) {
         // Horizontal swipe - next card
         x.value = withSpring(Math.sign(event.translationX) * SCREEN_WIDTH * 1.5);
@@ -161,38 +270,84 @@ export default function DiscoverScreen() {
     ],
   }));
 
-  const currentPet = MOCK_PETS[currentIndex];
-  const nextPet = MOCK_PETS[(currentIndex + 1) % MOCK_PETS.length];
+  const currentPet = pets[currentIndex];
+  const nextPet = pets[(currentIndex + 1) % pets.length];
 
   useEffect(() => {
-    if (currentIndex < MOCK_PETS.length - 1) {
+    if (currentIndex < pets.length - 1) {
       // Prefetch next pet's images
       if (nextPet) {
         prefetchImages(nextPet.photos);
       }
     }
-  }, [currentIndex]);
+  }, [currentIndex, pets]);
 
   const containerStyle = useMemo(() => [
     styles.container,
     { backgroundColor: Colors[theme].background }
   ], [theme]);
 
+  if (loading) {
+    return (
+      <View style={[containerStyle, styles.centerContent]}>
+        <ActivityIndicator size="large" color={Colors[theme].text} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[containerStyle, styles.centerContent]}>
+        <Text style={styles.errorText}>Failed to load pets</Text>
+      </View>
+    );
+  }
+
+  if (pets.length === 0) {
+    return (
+      <View style={[containerStyle, styles.centerContent]}>
+        <Text style={styles.errorText}>No pets available</Text>
+      </View>
+    );
+  }
+
   return (
     <GestureHandlerRootView style={containerStyle}>
-      <View style={styles.cardsContainer}>
-        <PetCard 
-          pet={nextPet} 
-          style={backCardStyle} 
-          isNext
-        />
-        <GestureDetector gesture={gesture}>
-          <PetCard 
-            pet={currentPet} 
-            style={frontCardStyle}
-          />
-        </GestureDetector>
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Discover</Text>
+          <Text style={styles.subtitle}>Find your perfect match</Text>
+        </View>
+        <View style={styles.cardsContainer}>
+          {nextPet && (
+            <PetCard 
+              pet={nextPet} 
+              style={backCardStyle} 
+              isNext
+            />
+          )}
+          <GestureDetector gesture={gesture}>
+            <PetCard 
+              pet={currentPet} 
+              style={frontCardStyle}
+            />
+          </GestureDetector>
+        </View>
+        <View style={styles.actionButtons}>
+          <Pressable 
+            style={[styles.actionButton, styles.dismissButton]}
+            onPress={handleSwipeLeft}
+          >
+            <Ionicons name="close" size={32} color="#123524" />
+          </Pressable>
+          <Pressable 
+            style={[styles.actionButton, styles.favoriteButton]}
+            onPress={handleSwipeRight}
+          >
+            <Ionicons name="heart" size={32} color="#FF2D55" />
+          </Pressable>
+        </View>
+      </SafeAreaView>
     </GestureHandlerRootView>
   );
 }
@@ -200,8 +355,23 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  safeArea: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: '#666',
   },
   cardsContainer: {
     width: SCREEN_WIDTH,
@@ -224,9 +394,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
-  video: {
-    width: '100%',
-    height: '100%',
+  videoContainer: {
+    backgroundColor: '#123524', // Dark green background while loading
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   overlay: {
     position: 'absolute',
@@ -234,7 +415,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(18, 53, 36, 0.5)',
   },
   name: {
     fontSize: 28,
@@ -259,5 +440,57 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 10,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
+    paddingVertical: 20,
+  },
+  actionButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  dismissButton: {
+    borderWidth: 2,
+    borderColor: '#123524',
+  },
+  favoriteButton: {
+    borderWidth: 2,
+    borderColor: '#123524',
+  },
+  infoButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#fff',
+    marginTop: 8,
+    fontSize: 14,
   },
 });

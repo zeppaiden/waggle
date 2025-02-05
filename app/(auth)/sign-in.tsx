@@ -30,7 +30,7 @@ export default function SignIn() {
     >
       <View style={styles.header}>
         <Ionicons name="paw" size={48} color={Colors[theme].primary} />
-        <Text style={styles.title}>Welcome to Adoptr</Text>
+        <Text style={styles.title}>Welcome to Waggle</Text>
         <Text style={styles.subtitle}>Find your perfect companion</Text>
       </View>
       

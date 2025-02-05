@@ -1,21 +1,103 @@
-import { useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, useWindowDimensions } from 'react-native';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { View, StyleSheet, Pressable, ScrollView, useWindowDimensions, Animated, ActivityIndicator } from 'react-native';
 import { Text } from '@/components/themed';
-import { MOCK_FAVORITE_PETS, Pet, FavoriteFilters } from '@/constants/mock-data';
+import { Pet, FavoriteFilters } from '@/constants/mock-data';
 import { useRouter } from 'expo-router';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { useFavorites } from '@/hooks/useFavorites';
+import { Colors } from '@/constants/colors-theme';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
-type PetSpecies = 'dog' | 'cat' | 'other';
+type PetSpecies = 'dog' | 'cat' | 'bunny' | 'other';
 type PetSize = 'small' | 'medium' | 'large';
+
+// TODO: Replace with actual user ID from authentication
+const TEMP_USER_ID = 'user123';
+
+type VideoCardProps = {
+  videoUrl: string;
+};
+
+function VideoCard({ videoUrl }: VideoCardProps) {
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const videoRef = useRef<Video | null>(null);
+
+  // Reset states when URL changes
+  useEffect(() => {
+    setIsVideoLoaded(false);
+    setHasError(false);
+  }, [videoUrl]);
+
+  // Stop video playback when component unmounts
+  useEffect(() => {
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.stopAsync();
+      }
+    };
+  }, []);
+
+  const handleLoad = useCallback(() => {
+    setIsVideoLoaded(true);
+    setHasError(false);
+  }, [videoUrl]);
+
+  const handleError = useCallback((error: string | undefined) => {
+    console.error('Error loading video:', videoUrl, error);
+    setHasError(true);
+    setIsVideoLoaded(false);
+  }, [videoUrl]);
+
+  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+    if (status.isLoaded && !isVideoLoaded) {
+      handleLoad();
+    }
+  }, [handleLoad, isVideoLoaded]);
+  
+  return (
+    <View style={[StyleSheet.absoluteFill, styles.videoContainer]}>
+      <Video
+        ref={videoRef}
+        source={{ uri: videoUrl }}
+        style={[
+          StyleSheet.absoluteFill,
+          !isVideoLoaded && { opacity: 0 }
+        ]}
+        resizeMode={ResizeMode.COVER}
+        shouldPlay={false}
+        isLooping={false}
+        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+        onError={handleError}
+        isMuted={true}
+      />
+      {(!isVideoLoaded && !hasError) && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      )}
+      {hasError && (
+        <View style={styles.errorOverlay}>
+          <Ionicons name="alert-circle-outline" size={32} color="#fff" />
+          <Text style={styles.errorText}>Failed to load video</Text>
+        </View>
+      )}
+    </View>
+  );
+}
 
 export default function FavoritesScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const [favorites, setFavorites] = useState<Pet[]>(MOCK_FAVORITE_PETS);
-  const [filteredFavorites, setFilteredFavorites] = useState<Pet[]>(MOCK_FAVORITE_PETS);
+  const { favorites, loading, error, removeFavorite, refresh } = useFavorites(TEMP_USER_ID);
+  const [filteredFavorites, setFilteredFavorites] = useState<Pet[]>([]);
   const [filters, setFilters] = useState<FavoriteFilters>({});
+  const [heartStates, setHeartStates] = useState<{ [key: string]: boolean }>({});
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const colorScheme = useColorScheme();
+  const theme = colorScheme ?? 'light';
 
   // Calculate grid dimensions
   const numColumns = 2;
@@ -23,15 +105,59 @@ export default function FavoritesScreen() {
   const cardWidth = (width - spacing * (numColumns + 1)) / numColumns;
   const cardHeight = cardWidth * 1.5;
 
-  const removeFavorite = useCallback((petId: string) => {
-    const newFavorites = favorites.filter(pet => pet.id !== petId);
-    setFavorites(newFavorites);
-    applyFilters(filters, newFavorites);
-  }, [favorites, filters]);
+  const animatedHearts = useRef<{ [key: string]: Animated.Value }>({}).current;
+  const animatedCards = useRef<{ [key: string]: Animated.Value }>({}).current;
 
-  const navigateToPetProfile = useCallback((petId: string) => {
-    router.push(`/pet/${petId}`);
-  }, [router]);
+  // Update filtered favorites when favorites change
+  useEffect(() => {
+    applyFilters(filters, favorites);
+  }, [favorites]);
+
+  // Initialize animations for new pets
+  useEffect(() => {
+    filteredFavorites.forEach(pet => {
+      if (!animatedHearts[pet.id]) {
+        animatedHearts[pet.id] = new Animated.Value(0);
+      }
+      if (!animatedCards[pet.id]) {
+        animatedCards[pet.id] = new Animated.Value(1);
+      }
+    });
+  }, [filteredFavorites]);
+
+  const handleRemoveFavorite = useCallback((petId: string) => {
+    // Update heart state first
+    setHeartStates(prev => ({ ...prev, [petId]: true }));
+    
+    // Then animate with poof effect
+    Animated.sequence([
+      // Poof effect for the heart
+      Animated.parallel([
+        Animated.timing(animatedHearts[petId], {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]),
+      // Card removal animation
+      Animated.timing(animatedCards[petId], {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      // After animations complete, remove from Firebase and state
+      removeFavorite(petId);
+      // Clean up animation values and heart state
+      delete animatedHearts[petId];
+      delete animatedCards[petId];
+      setHeartStates(prev => {
+        const newState = { ...prev };
+        delete newState[petId];
+        return newState;
+      });
+    });
+  }, [removeFavorite]);
 
   const applyFilters = useCallback((newFilters: FavoriteFilters, petsToFilter = favorites) => {
     setFilters(newFilters);
@@ -55,6 +181,10 @@ export default function FavoritesScreen() {
     
     setFilteredFavorites(filtered);
   }, [favorites]);
+
+  const navigateToPetProfile = useCallback((petId: string) => {
+    router.push(`/pet/${petId}`);
+  }, [router]);
 
   const toggleSpeciesFilter = (species: PetSpecies) => {
     const currentSpecies = filters.species || [];
@@ -82,6 +212,12 @@ export default function FavoritesScreen() {
       </Text>
     </Pressable>
   );
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refresh();
+    setIsRefreshing(false);
+  };
 
   const renderContent = () => {
     if (!favorites.length) {
@@ -113,47 +249,115 @@ export default function FavoritesScreen() {
         style={styles.scrollView} 
         contentContainerStyle={styles.grid}
       >
-        {filteredFavorites.map((pet) => (
-          <Pressable
-            key={pet.id}
-            style={[styles.card, { width: cardWidth, height: cardHeight }]}
-            onPress={() => navigateToPetProfile(pet.id)}
-          >
-            <Video
-              source={{ uri: pet.videoUrl }}
-              style={StyleSheet.absoluteFill}
-              resizeMode={ResizeMode.COVER}
-              shouldPlay={false}
-              isLooping={false}
-              posterSource={{ uri: pet.photos[0] }}
-              usePoster={true}
-            />
-            <BlurView intensity={50} style={styles.petInfo} tint="dark">
-              <Text style={styles.petName}>{pet.name}</Text>
-              <Text style={styles.petDetails}>
-                {pet.breed} • {pet.age}y
-              </Text>
-            </BlurView>
-            <Pressable
-              style={styles.removeButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                removeFavorite(pet.id);
-              }}
+        {filteredFavorites.map((pet) => {
+          const heartScale = animatedHearts[pet.id]?.interpolate({
+            inputRange: [0, 0.5, 0.8, 1],
+            outputRange: [1, 1.4, 0.6, 0.3]
+          }) || 1;
+
+          const heartOpacity = animatedHearts[pet.id]?.interpolate({
+            inputRange: [0, 0.5, 1],
+            outputRange: [1, 0.8, 0]
+          }) || 1;
+
+          const cardScale = animatedCards[pet.id]?.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.5, 1]
+          }) || 1;
+
+          const cardOpacity = animatedCards[pet.id] || 1;
+
+          return (
+            <Animated.View
+              key={pet.id}
+              style={[
+                { width: cardWidth, height: cardHeight },
+                styles.card,
+                {
+                  transform: [{ scale: cardScale }],
+                  opacity: cardOpacity,
+                }
+              ]}
             >
-              <Ionicons name="heart-dislike" size={20} color="white" />
-            </Pressable>
-          </Pressable>
-        ))}
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={() => navigateToPetProfile(pet.id)}
+              >
+                <VideoCard videoUrl={pet.videoUrl} />
+                <BlurView intensity={50} style={styles.petInfo} tint="dark">
+                  <Text style={styles.petName}>{pet.name}</Text>
+                  <Text style={styles.petDetails}>
+                    {pet.breed} • {pet.age}y
+                  </Text>
+                </BlurView>
+                <Pressable
+                  style={styles.removeButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleRemoveFavorite(pet.id);
+                  }}
+                >
+                  <Animated.View
+                    style={{
+                      transform: [{ scale: heartScale }],
+                      opacity: heartOpacity
+                    }}
+                  >
+                    <Ionicons 
+                      name="heart"
+                      size={20} 
+                      color="white" 
+                    />
+                  </Animated.View>
+                </Pressable>
+              </Pressable>
+            </Animated.View>
+          );
+        })}
       </ScrollView>
     );
   };
 
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={Colors[theme].text} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text style={styles.errorText}>Failed to load pets</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Favorites</Text>
-        <Text style={styles.subtitle}>{favorites.length} favorites</Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.title}>Favorites</Text>
+            <Text style={styles.subtitle}>{favorites.length} favorites</Text>
+          </View>
+          <Pressable 
+            style={[
+              styles.refreshButton,
+              (loading || isRefreshing) && styles.refreshButtonDisabled
+            ]}
+            onPress={handleRefresh}
+            disabled={loading || isRefreshing}
+          >
+            <Ionicons 
+              name="refresh" 
+              size={24} 
+              color={(loading || isRefreshing) ? '#999' : Colors[theme].text} 
+              style={(loading || isRefreshing) && styles.rotating}
+            />
+          </Pressable>
+        </View>
       </View>
 
       {favorites.length > 0 && (
@@ -172,6 +376,11 @@ export default function FavoritesScreen() {
               label="Cats"
               active={filters.species?.includes('cat') ?? false}
               onPress={() => toggleSpeciesFilter('cat')}
+            />
+            <FilterButton
+              label="Bunnies"
+              active={filters.species?.includes('bunny') ?? false}
+              onPress={() => toggleSpeciesFilter('bunny')}
             />
             <FilterButton
               label="Small"
@@ -201,6 +410,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 8,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     fontSize: 32,
@@ -297,5 +511,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#666',
+  },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  refreshButtonDisabled: {
+    opacity: 0.5,
+  },
+  rotating: {
+    transform: [{ rotate: '45deg' }],
+  },
+  videoContainer: {
+    backgroundColor: '#123524', // Dark green background while loading
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 

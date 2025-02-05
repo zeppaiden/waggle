@@ -1,130 +1,137 @@
-import { View, StyleSheet, ScrollView, Image } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text, Button } from '@/components/themed';
 import { Colors } from '@/constants/colors-theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Video, ResizeMode } from 'expo-av';
-import { Ionicons } from '@expo/vector-icons';
-import { MOCK_PETS } from '@/constants/mock-data';
 import { useMemo } from 'react';
+import { PetProfile } from '@/components/pet-profile/PetProfile';
+import { usePets } from '@/hooks/usePets';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, { 
+  useSharedValue, 
+  useAnimatedStyle, 
+  withRepeat, 
+  withTiming,
+  withSequence,
+  withDelay
+} from 'react-native-reanimated';
 
 export default function PetProfileScreen() {
   const { petId } = useLocalSearchParams();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const theme = colorScheme ?? 'light';
-
-  // Find the pet from our mock data
-  const pet = MOCK_PETS.find(p => p.id === petId);
+  const { pets, loading, error } = usePets();
 
   const containerStyle = useMemo(() => [
     styles.container,
     { backgroundColor: Colors[theme].background }
   ], [theme]);
 
+  // Loading animation values
+  const scale1 = useSharedValue(1);
+  const scale2 = useSharedValue(1);
+  const scale3 = useSharedValue(1);
+
+  // Create animated styles for the dots
+  const dot1Style = useAnimatedStyle(() => ({
+    transform: [{ scale: scale1.value }]
+  }));
+  const dot2Style = useAnimatedStyle(() => ({
+    transform: [{ scale: scale2.value }]
+  }));
+  const dot3Style = useAnimatedStyle(() => ({
+    transform: [{ scale: scale3.value }]
+  }));
+
+  // Start the loading animation
+  useMemo(() => {
+    const animateDot = (value: Animated.SharedValue<number>, delay: number) => {
+      value.value = withRepeat(
+        withSequence(
+          withDelay(
+            delay,
+            withTiming(1.5, { duration: 500 })
+          ),
+          withTiming(1, { duration: 500 })
+        ),
+        -1
+      );
+    };
+
+    if (loading) {
+      animateDot(scale1, 0);
+      animateDot(scale2, 200);
+      animateDot(scale3, 400);
+    }
+  }, [loading]);
+
+  if (loading) {
+    return (
+      <View style={[containerStyle, styles.loadingContainer]}>
+        <View style={styles.loadingContent}>
+          <Ionicons 
+            name="paw" 
+            size={48} 
+            color={Colors[theme].primary} 
+            style={styles.loadingIcon}
+          />
+          <Text style={styles.loadingText}>Finding your perfect match...</Text>
+          <View style={styles.dotsContainer}>
+            <Animated.View style={[styles.dot, dot1Style]} />
+            <Animated.View style={[styles.dot, dot2Style]} />
+            <Animated.View style={[styles.dot, dot3Style]} />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[containerStyle, styles.errorContainer]}>
+        <Ionicons 
+          name="alert-circle-outline" 
+          size={48} 
+          color={Colors[theme].text} 
+        />
+        <Text style={styles.errorText}>Failed to load pet profile</Text>
+        <Button 
+          onPress={() => router.back()}
+          style={styles.errorButton}
+        >
+          <Text style={styles.errorButtonText}>Go Back</Text>
+        </Button>
+      </View>
+    );
+  }
+
+  const pet = pets.find(p => p.id === petId);
+
   if (!pet) {
     return (
-      <View style={containerStyle}>
-        <Text>Pet not found</Text>
-        <Button onPress={() => router.back()}>Go Back</Button>
+      <View style={[containerStyle, styles.errorContainer]}>
+        <Ionicons 
+          name="search-outline" 
+          size={48} 
+          color={Colors[theme].text} 
+        />
+        <Text style={styles.errorText}>Pet not found</Text>
+        <Button 
+          onPress={() => router.back()}
+          style={styles.errorButton}
+        >
+          <Text style={styles.errorButtonText}>Go Back</Text>
+        </Button>
       </View>
     );
   }
 
   return (
-    <ScrollView style={containerStyle}>
-      <View style={styles.header}>
-        <Button
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <View style={styles.backButtonContent}>
-            <Ionicons 
-              name="arrow-back"
-              size={24}
-              color={Colors[theme].text}
-            />
-          </View>
-        </Button>
-      </View>
-
-      <Video
-        source={{ uri: pet.videoUrl }}
-        style={styles.video}
-        shouldPlay
-        isLooping
-        resizeMode={ResizeMode.COVER}
-      />
-
-      <View style={styles.content}>
-        <View style={styles.titleRow}>
-          <View>
-            <Text style={styles.name}>{pet.name}, {pet.age}</Text>
-            <Text style={styles.location}>{pet.location}</Text>
-          </View>
-          <View style={styles.scoreContainer}>
-            <Text style={styles.scoreLabel}>Match</Text>
-            <Text style={styles.score}>{pet.matchScore}</Text>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
-          <Text style={styles.description}>{pet.description}</Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Breed</Text>
-          <Text style={styles.detailText}>{pet.breed}</Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Interests</Text>
-          <View style={styles.interestsContainer}>
-            {pet.interests.map((interest, index) => (
-              <View key={index} style={styles.interestTag}>
-                <Text style={styles.interestText}>{interest}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Photos</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosContainer}>
-            {pet.photos.map((photo, index) => (
-              <Image
-                key={index}
-                source={{ uri: photo }}
-                style={styles.photo}
-              />
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Owner</Text>
-          <View style={styles.ownerContainer}>
-            <Text style={styles.detailText}>{pet.owner.name}</Text>
-            {pet.owner.verified && (
-              <View style={styles.verifiedBadge}>
-                <Text style={styles.verifiedText}>✓ Verified</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        <Button
-          onPress={() => router.push({
-            pathname: '/chat/[chatId]',
-            params: { chatId: pet.id }
-          })}
-          style={styles.chatButton}
-        >
-          Chat with Owner
-        </Button>
-      </View>
-    </ScrollView>
+    <PetProfile 
+      pet={pet}
+      onClose={() => router.back()}
+    />
   );
 }
 
@@ -132,130 +139,54 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 1,
-    padding: 16,
-    paddingTop: 60,
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  backButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  loadingContainer: {
     justifyContent: 'center',
-    minWidth: 36,
-    minHeight: 36,
-  },
-  video: {
-    width: '100%',
-    height: 400,
-  },
-  content: {
-    padding: 20,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  name: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  location: {
-    fontSize: 18,
-    color: '#666',
-    marginTop: 4,
-  },
-  scoreContainer: {
     alignItems: 'center',
   },
-  scoreLabel: {
-    fontSize: 14,
-    color: '#666',
+  loadingContent: {
+    alignItems: 'center',
   },
-  score: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  loadingIcon: {
+    marginBottom: 16,
+  },
+  loadingText: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 24,
     color: Colors.light.primary,
   },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#444',
-  },
-  detailText: {
-    fontSize: 16,
-    color: '#444',
-  },
-  interestsContainer: {
+  dotsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
   },
-  interestTag: {
-    backgroundColor: Colors.light.primary + '20',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  interestText: {
-    color: Colors.light.primary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  photosContainer: {
-    marginTop: 10,
-  },
-  photo: {
-    width: 200,
-    height: 200,
-    borderRadius: 12,
-    marginRight: 12,
-  },
-  ownerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  verifiedBadge: {
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: Colors.light.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
   },
-  verifiedText: {
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#666',
+    marginTop: 12,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  errorButton: {
+    backgroundColor: Colors.light.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+  },
+  errorButtonText: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  chatButton: {
-    marginTop: 20,
-    marginBottom: 40,
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

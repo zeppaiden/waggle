@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-- **Project Name:** _Adoptr_ (working title)
+- **Project Name:** _Waggle_ (working title)
 - **Primary Purpose:**  
   Provide a lean application that facilitates pet adoptions, training videos, and additional pet-focused content. The focus is on a consumer-centric experience where users can quickly browse, favorite, and interact with pet profiles.
 - **Unique Value Proposition:**  

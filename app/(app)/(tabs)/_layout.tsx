@@ -17,6 +17,7 @@ export default function TabsLayout() {
           borderTopColor: Colors[theme].border,
           backgroundColor: Colors[theme].card,
         },
+        headerShown: false,
       }}
     >
       <Tabs.Screen
