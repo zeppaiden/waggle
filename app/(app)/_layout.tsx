@@ -1,29 +1,51 @@
-import { Stack, Redirect } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useAuth } from '@/contexts/auth';
-import { View, ActivityIndicator } from 'react-native';
+import { useEffect } from 'react';
+import { useRouter, useSegments } from 'expo-router';
+import { View } from 'react-native';
 
 export default function AppLayout() {
   const { user, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
-  // Show loading screen while checking auth state.
+  useEffect(() => {
+    if (!isLoading && !user) {
+      // If user is not authenticated, redirect to sign in
+      router.replace('/(auth)/sign-in');
+    }
+  }, [user, isLoading]);
+
   if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
+    return <View style={{ flex: 1 }} />; // Loading state
   }
 
-  // If not authenticated, redirect to sign-in.
-  if (!user) {
-    return <Redirect href="/(auth)/sign-in" />;
-  }
-
-  // This layout is protected and will only render when authenticated.
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="+not-found" options={{ title: 'Oops!', headerShown: true }} />
+    <Stack
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen
+        name="(tabs)"
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="pet/[petId]"
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+        }}
+      />
+      <Stack.Screen
+        name="chat/[chatId]"
+        options={{
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
     </Stack>
   );
 } 

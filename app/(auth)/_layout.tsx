@@ -1,15 +1,25 @@
 import { Stack } from 'expo-router';
-import { Colors } from '@/constants/colors-theme';
+import { useAuth } from '@/contexts/auth';
+import { useEffect } from 'react';
+import { useRouter, useSegments } from 'expo-router';
 
 export default function AuthLayout() {
+  const { user, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && user) {
+      // If user is authenticated, redirect to main app
+      router.replace('/(app)/(tabs)');
+    }
+  }, [user, isLoading]);
+
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: {
-          backgroundColor: Colors.light.background,
-        },
-        animation: 'slide_from_right',
+        animation: 'fade',
       }}
     />
   );
