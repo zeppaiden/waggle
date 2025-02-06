@@ -1,11 +1,10 @@
 import { Stack } from 'expo-router';
 import { useAuth } from '@/contexts/auth';
 import { useEffect } from 'react';
-import { useRouter, useSegments } from 'expo-router';
+import { useRouter } from 'expo-router';
 
 export default function AuthLayout() {
   const { user, isLoading } = useAuth();
-  const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
