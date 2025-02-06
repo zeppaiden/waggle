@@ -3,21 +3,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/colors-theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
-export default function TabsLayout() {
+export default function TabLayout() {
   const colorScheme = useColorScheme();
   const theme = colorScheme ?? 'light';
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[theme].tabIconSelected,
-        tabBarInactiveTintColor: Colors[theme].tabIconDefault,
+        headerShown: false,
+        tabBarActiveTintColor: Colors[theme].primary,
+        tabBarInactiveTintColor: Colors[theme].secondary,
+        tabBarShowLabel: true,
         tabBarStyle: {
           borderTopWidth: 1,
-          borderTopColor: Colors[theme].border,
-          backgroundColor: Colors[theme].card,
+          borderTopColor: '#f0f0f0',
+          backgroundColor: '#fff',
         },
-        headerShown: false,
       }}
     >
       <Tabs.Screen
@@ -30,11 +31,11 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="chats"
         options={{
-          title: 'Explore',
+          title: 'Messages',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search" size={size} color={color} />
+            <Ionicons name="chatbubbles" size={size} color={color} />
           ),
         }}
       />

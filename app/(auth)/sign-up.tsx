@@ -16,7 +16,7 @@ export default function SignUp() {
     try {
       setLoading(true);
       await createUserWithEmailAndPassword(auth, email, password);
-      router.replace('/(app)/(tabs)');
+      // Navigation will be handled by AuthLayout based on onboarding status
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {

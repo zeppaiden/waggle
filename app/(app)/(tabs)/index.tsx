@@ -25,13 +25,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useIsFocused } from '@react-navigation/native';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
+import { useAuth } from '@/contexts/auth';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.5;
 const SWIPE_UP_THRESHOLD = SCREEN_HEIGHT * 0.2;
-
-// TODO: Replace with actual user ID from authentication
-const TEMP_USER_ID = 'user123';
 
 interface PetCardProps {
   pet: any;
@@ -42,11 +40,14 @@ interface PetCardProps {
 type VideoCardProps = {
   videoUrl: string;
   shouldPlay?: boolean;
+  isMuted: boolean;
+  onToggleMute: () => void;
 };
 
-function VideoCard({ videoUrl, shouldPlay = true }: VideoCardProps) {
+function VideoCard({ videoUrl, shouldPlay = true, isMuted, onToggleMute }: VideoCardProps) {
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);  const [isPaused, setIsPaused] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const videoRef = useRef<Video | null>(null);
   const isFocused = useIsFocused();
 
@@ -63,17 +64,29 @@ function VideoCard({ videoUrl, shouldPlay = true }: VideoCardProps) {
           uri: videoUrl,
           overrideFileExtensionAndroid: 'm3u8'
         },
-        { shouldPlay: isFocused && !isPaused },
+        { 
+          shouldPlay: isFocused && !isPaused,
+          isLooping: true,
+          isMuted: isMuted
+        },
         false
       );
     }
   }, [videoUrl]);
+
+  // Handle mute state changes
+  useEffect(() => {
+    if (videoRef.current && isVideoLoaded) {
+      videoRef.current.setIsMutedAsync(isMuted);
+    }
+  }, [isMuted]);
 
   // Handle screen focus/unfocus
   useEffect(() => {
     if (videoRef.current && isVideoLoaded) {
       if (isFocused && !isPaused) {
         videoRef.current.playAsync();
+        videoRef.current.setIsLoopingAsync(true);
       } else {
         videoRef.current.pauseAsync();
       }
@@ -137,7 +150,7 @@ function VideoCard({ videoUrl, shouldPlay = true }: VideoCardProps) {
           isLooping={true}
           onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
           onError={handleError}
-          isMuted={true}
+          isMuted={isMuted}
           useNativeControls={false}
           progressUpdateIntervalMillis={500}
         />
@@ -162,20 +175,42 @@ function VideoCard({ videoUrl, shouldPlay = true }: VideoCardProps) {
 
 function PetCard({ pet, style, isNext = false }: PetCardProps) {
   const router = useRouter();
+  const [isMuted, setIsMuted] = useState(true);
   const viewStyle = useMemo(() => [
     styles.card,
     style
   ], [style]);
 
+  const toggleMute = useCallback(() => {
+    setIsMuted(prev => !prev);
+  }, []);
+
   return (
     <Animated.View style={viewStyle}>
-      <VideoCard videoUrl={pet.videoUrl} shouldPlay={!isNext} />
-      <Pressable 
-        style={styles.infoButton}
-        onPress={() => router.push(`/pet/${pet.id}`)}
-      >
-        <Ionicons name="information-circle" size={32} color="#123524" />
-      </Pressable>
+      <VideoCard 
+        videoUrl={pet.videoUrl} 
+        shouldPlay={!isNext}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
+      />
+      <View style={styles.controlButtons}>
+        <Pressable 
+          style={styles.infoButton}
+          onPress={() => router.push(`/pet/${pet.id}`)}
+        >
+          <Ionicons name="information-circle" size={32} color="#123524" />
+        </Pressable>
+        <Pressable 
+          style={styles.muteButton}
+          onPress={toggleMute}
+        >
+          <Ionicons 
+            name={isMuted ? "volume-mute" : "volume-medium"} 
+            size={24} 
+            color="#123524" 
+          />
+        </Pressable>
+      </View>
       <View style={styles.overlay}>
         <Text style={styles.name}>{pet.name}, {pet.age}</Text>
         <Text style={styles.location}>{pet.location}</Text>
@@ -191,7 +226,8 @@ export default function DiscoverScreen() {
   const theme = colorScheme ?? 'light';
   const router = useRouter();
   const { pets, loading, error } = usePets();
-  const { addFavorite, isFavorite } = useFavorites(TEMP_USER_ID);
+  const { user } = useAuth();
+  const { addFavorite, isFavorite } = useFavorites(user?.uid || '');
 
   const x = useSharedValue(0);
   const y = useSharedValue(0);
@@ -500,17 +536,29 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#123524',
   },
-  infoButton: {
+  controlButtons: {
     position: 'absolute',
     top: 16,
     right: 16,
+    alignItems: 'center',
+    zIndex: 2,
+    gap: 8,
+  },
+  infoButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 2,
+  },
+  muteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   centerContent: {
     justifyContent: 'center',

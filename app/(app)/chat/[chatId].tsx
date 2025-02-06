@@ -1,109 +1,288 @@
+import { View, StyleSheet, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, Image, Animated } from 'react-native';
+import { Text } from '@/components/themed';
+import { Colors } from '@/constants/colors-theme';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { View, StyleSheet, TextInput, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
-import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/configs/firebase';
-import { useAuth } from '@/contexts/auth';
+import { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Button } from '@/components/themed';
+import { format } from 'date-fns';
+import { usePets } from '@/hooks/usePets';
+import { useAuth } from '@/contexts/auth';
+import { PulsingPaw } from '@/components/ui/PulsingPaw';
+import { db } from '@/configs/firebase';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where } from 'firebase/firestore';
 
 type Message = {
   id: string;
   text: string;
   senderId: string;
-  createdAt: Date;
+  timestamp: Date;
+  isRead: boolean;
+  chatId: string;
 };
 
-export default function ChatScreen() {
-  const { chatId } = useLocalSearchParams();
-  const router = useRouter();
-  const { user } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
+function TypingIndicator() {
+  const [dot1] = useState(new Animated.Value(0));
+  const [dot2] = useState(new Animated.Value(0));
+  const [dot3] = useState(new Animated.Value(0));
 
   useEffect(() => {
-    if (!user || !chatId) return;
+    const animateDot = (dot: Animated.Value, delay: number) => {
+      return Animated.sequence([
+        Animated.delay(delay),
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(dot, {
+              toValue: 1,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+            Animated.timing(dot, {
+              toValue: 0,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+          ])
+        ),
+      ]).start();
+    };
 
-    const chatRef = collection(db, 'chats', chatId as string, 'messages');
-    const q = query(chatRef, orderBy('createdAt', 'desc'));
+    animateDot(dot1, 0);
+    animateDot(dot2, 200);
+    animateDot(dot3, 400);
+  }, []);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const messageList: Message[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        messageList.push({
-          id: doc.id,
-          text: data.text,
-          senderId: data.senderId,
-          createdAt: data.createdAt?.toDate(),
-        });
+  return (
+    <View style={[styles.messageContainer, styles.otherMessage]}>
+      <View style={[styles.messageBubble, styles.otherBubble, styles.typingBubble]}>
+        <View style={styles.typingContainer}>
+          {[dot1, dot2, dot3].map((dot, index) => (
+            <Animated.View
+              key={index}
+              style={[
+                styles.typingDot,
+                {
+                  transform: [{
+                    translateY: dot.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, -4]
+                    })
+                  }]
+                }
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export default function ChatDetailScreen() {
+  console.log('[ChatDetail] Screen mounted');
+  const params = useLocalSearchParams();
+  const colorScheme = useColorScheme();
+  const theme = colorScheme ?? 'light';
+  const router = useRouter();
+  const { user } = useAuth();
+  const { pets } = usePets();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const flatListRef = useRef<FlatList>(null);
+  const [isTyping, setIsTyping] = useState(false);
+
+  const chatId = params.chatId as string;
+  const pet = pets.find(p => p.id === chatId);
+
+  // Add this helper function at the component level
+  const scrollToBottom = (animated = true) => {
+    if (flatListRef.current) {
+      flatListRef.current.scrollToEnd({ animated });
+    }
+  };
+
+  // Update the messages effect to scroll when new messages arrive
+  useEffect(() => {
+    if (!chatId) return;
+
+    console.log('[ChatDetail] Setting up messages listener for chat:', chatId);
+    const messagesRef = collection(db, 'messages');
+    const messagesQuery = query(
+      messagesRef,
+      where('chatId', '==', chatId),
+      orderBy('timestamp', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+      const newMessages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp?.toDate() || new Date(),
+      })) as Message[];
+
+      console.log('[ChatDetail] Received messages update:', {
+        count: newMessages.length,
+        lastMessage: newMessages[newMessages.length - 1]?.text
       });
-      setMessages(messageList);
+
+      setMessages(newMessages);
+      setIsLoading(false);
+      // Scroll to bottom when new messages arrive
+      setTimeout(() => scrollToBottom(), 100);
+    }, (error) => {
+      console.error('[ChatDetail] Error subscribing to messages:', error);
+      setIsLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [chatId, user]);
+    return () => {
+      console.log('[ChatDetail] Cleaning up messages listener');
+      unsubscribe();
+    };
+  }, [chatId]);
 
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !user || !chatId) return;
+  // Add effect to scroll when typing state changes
+  useEffect(() => {
+    if (isTyping) {
+      setTimeout(() => scrollToBottom(), 100);
+    }
+  }, [isTyping]);
+
+  const handleSend = async () => {
+    if (!newMessage.trim() || !user || !pet) return;
 
     try {
-      const chatRef = collection(db, 'chats', chatId as string, 'messages');
-      await addDoc(chatRef, {
+      const messageData = {
         text: newMessage.trim(),
         senderId: user.uid,
-        createdAt: serverTimestamp(),
-      });
+        timestamp: serverTimestamp(),
+        isRead: false,
+        chatId,
+        participants: [user.uid, 'mock-owner-id'],
+      };
+
+      console.log('[ChatDetail] Sending message:', messageData);
+      await addDoc(collection(db, 'messages'), messageData);
       setNewMessage('');
+      scrollToBottom();
+
+      // Show typing indicator after a delay
+      setTimeout(() => {
+        setIsTyping(true);
+        
+        // Send automated response after typing
+        setTimeout(async () => {
+          setIsTyping(false);
+          const responseData = {
+            text: `Thank you for your message about ${pet.name}! I'm ${pet.owner.name}, ${pet.name}'s current owner. I'll be happy to tell you more about them. ${pet.name} is a wonderful ${pet.breed} who loves ${pet.interests[0]} and ${pet.interests[1]}. Would you like to schedule a meet and greet?`,
+            senderId: 'mock-owner-id',
+            timestamp: serverTimestamp(),
+            isRead: false,
+            chatId,
+            participants: [user.uid, 'mock-owner-id'],
+          };
+          await addDoc(collection(db, 'messages'), responseData);
+        }, 2000); // Show typing for 2 seconds
+      }, 1000); // Wait 1 second before showing typing
+
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('[ChatDetail] Error sending message:', error);
+      setIsTyping(false);
     }
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
-    const isOwnMessage = item.senderId === user?.uid;
+    const isOwn = item.senderId === user?.uid;
 
     return (
-      <View
-        style={[
-          styles.messageContainer,
-          isOwnMessage ? styles.ownMessage : styles.otherMessage,
-        ]}
-      >
-        <Text style={styles.messageText}>{item.text}</Text>
-        <Text style={styles.timestamp}>
-          {item.createdAt?.toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </Text>
+      <View style={[
+        styles.messageContainer,
+        isOwn ? styles.ownMessage : styles.otherMessage
+      ]}>
+        <View style={[
+          styles.messageBubble,
+          isOwn ? styles.ownBubble : styles.otherBubble
+        ]}>
+          <Text style={[
+            styles.messageText,
+            isOwn ? styles.ownMessageText : styles.otherMessageText
+          ]}>
+            {item.text}
+          </Text>
+          <Text style={[
+            styles.timestamp,
+            isOwn ? styles.ownTimestamp : styles.otherTimestamp
+          ]}>
+            {format(item.timestamp, 'h:mm a')}
+          </Text>
+        </View>
       </View>
     );
   };
 
+  if (!pet || isLoading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <PulsingPaw size={60} backgroundColor="transparent" />
+      </View>
+    );
+  }
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
+    <KeyboardAvoidingView 
+      style={styles.container} 
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <View style={styles.header}>
-        <Button
-          onPress={() => router.back()}
+        <Pressable 
           style={styles.backButton}
+          onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
-        </Button>
-        <Text style={styles.headerTitle}>Chat</Text>
+          <Ionicons name="arrow-back" size={24} color={Colors[theme].text} />
+        </Pressable>
+        <Image 
+          source={{ uri: params.petImage as string }}
+          style={styles.petImage}
+        />
+        <View style={styles.headerText}>
+          <Text style={styles.petName}>{params.petName as string}</Text>
+          <Text style={styles.ownerName}>{params.ownerName as string}</Text>
+        </View>
       </View>
 
-      <FlatList
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
-        inverted
-        contentContainerStyle={styles.messageList}
-      />
+      {messages.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIconContainer}>
+            <Ionicons 
+              name="chatbubble-outline" 
+              size={32} 
+              color={Colors.light.primary}
+              style={styles.emptyIconBubble}
+            />
+            <Ionicons 
+              name="chatbubble-outline" 
+              size={24} 
+              color={Colors.light.primary + '80'}
+              style={[styles.emptyIconBubble, styles.emptyIconBubbleSmall]}
+            />
+          </View>
+          <Text style={styles.emptyTitle}>No Messages Yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Start the conversation by sending a message!
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.messagesList}
+          onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+        />
+      )}
 
       <View style={styles.inputContainer}>
         <TextInput
@@ -112,14 +291,22 @@ export default function ChatScreen() {
           onChangeText={setNewMessage}
           placeholder="Type a message..."
           multiline
+          maxLength={500}
         />
-        <Button
-          onPress={sendMessage}
-          style={styles.sendButton}
+        <Pressable
+          style={[
+            styles.sendButton,
+            !newMessage.trim() && styles.sendButtonDisabled
+          ]}
+          onPress={handleSend}
           disabled={!newMessage.trim()}
         >
-          <Ionicons name="send" size={24} color="#007AFF" />
-        </Button>
+          <Ionicons 
+            name="send" 
+            size={20} 
+            color="#fff"
+          />
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
@@ -130,68 +317,172 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
     paddingTop: 60,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: '#f0f0f0',
+    backgroundColor: '#fff',
   },
   backButton: {
-    marginRight: 15,
+    padding: 8,
+    marginRight: 12,
   },
-  headerTitle: {
+  petImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  headerText: {
+    flex: 1,
+  },
+  petName: {
     fontSize: 18,
     fontWeight: '600',
   },
-  messageList: {
-    padding: 15,
+  ownerName: {
+    fontSize: 14,
+    color: '#666',
+  },
+  messagesList: {
+    padding: 16,
+    flexGrow: 1,
   },
   messageContainer: {
+    marginBottom: 16,
     maxWidth: '80%',
-    marginVertical: 5,
-    padding: 12,
-    borderRadius: 20,
   },
   ownMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#007AFF',
   },
   otherMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#E5E5EA',
+  },
+  messageBubble: {
+    padding: 12,
+    borderRadius: 20,
+  },
+  ownBubble: {
+    backgroundColor: Colors.light.primary,
+    borderBottomRightRadius: 4,
+  },
+  otherBubble: {
+    backgroundColor: '#f0f0f0',
+    borderBottomLeftRadius: 4,
   },
   messageText: {
     fontSize: 16,
+    marginBottom: 4,
+  },
+  ownMessageText: {
     color: '#fff',
+  },
+  otherMessageText: {
+    color: '#000',
   },
   timestamp: {
     fontSize: 12,
+    alignSelf: 'flex-end',
+  },
+  ownTimestamp: {
     color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 4,
+  },
+  otherTimestamp: {
+    color: '#666',
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 15,
+    padding: 16,
+    paddingBottom: 32,
     borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
+    borderTopColor: '#f0f0f0',
+    backgroundColor: '#fff',
   },
   input: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    marginRight: 10,
+    minHeight: 40,
     maxHeight: 100,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    fontSize: 16,
   },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F2F2F7',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#123524',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    marginBottom: 24,
+    position: 'relative',
+  },
+  emptyIconBubble: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    transform: [{ rotate: '10deg' }],
+    backgroundColor: Colors.light.primary + '10',
+    padding: 12,
+    borderRadius: 20,
+  },
+  emptyIconBubbleSmall: {
+    left: 0,
+    top: 0,
+    transform: [{ rotate: '-10deg' }],
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: Colors.light.primary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  typingBubble: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minWidth: 52,
+  },
+  typingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 20,
+    gap: 4,
+  },
+  typingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#123524',
+    marginHorizontal: 1,
   },
 }); 

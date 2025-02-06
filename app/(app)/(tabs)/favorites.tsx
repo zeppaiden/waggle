@@ -10,12 +10,10 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { Colors } from '@/constants/colors-theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
+import { useAuth } from '@/contexts/auth';
 
 type PetSpecies = 'dog' | 'cat' | 'bunny' | 'other';
 type PetSize = 'small' | 'medium' | 'large';
-
-// TODO: Replace with actual user ID from authentication
-const TEMP_USER_ID = 'user123';
 
 // Add a constant for the phthalo green color
 const PHTHALO_GREEN = '#123524';
@@ -93,7 +91,8 @@ function VideoCard({ videoUrl }: VideoCardProps) {
 export default function FavoritesScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { favorites, loading, error, removeFavorite, refresh } = useFavorites(TEMP_USER_ID);
+  const { user } = useAuth(); // Add auth context
+  const { favorites, loading, error, removeFavorite, refresh } = useFavorites(user?.uid || '');
   const [filteredFavorites, setFilteredFavorites] = useState<Pet[]>([]);
   const [filters, setFilters] = useState<FavoriteFilters>({});
   const [heartStates, setHeartStates] = useState<{ [key: string]: boolean }>({});

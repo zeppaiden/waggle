@@ -8,6 +8,8 @@ import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { Pet } from '@/constants/mock-data';
 import { useIsFocused } from '@react-navigation/native';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
+import { useRouter } from 'expo-router';
+import { useAuth } from '@/contexts/auth';
 
 interface PetProfileProps {
   pet: Pet;
@@ -22,6 +24,8 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
   const [isPaused, setIsPaused] = useState(false);
   const videoRef = useRef<Video>(null);
   const isFocused = useIsFocused();
+  const router = useRouter();
+  const { user } = useAuth();
 
   const containerStyle = useMemo(() => [
     styles.container,
@@ -41,7 +45,10 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
           uri: pet.videoUrl,
           overrideFileExtensionAndroid: 'm3u8'
         },
-        { shouldPlay: isFocused && !isPaused },
+        { 
+          shouldPlay: isFocused && !isPaused,
+          isLooping: true  // Ensure looping is set during load
+        },
         false
       );
     }
@@ -52,6 +59,7 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
     if (videoRef.current && isVideoLoaded) {
       if (isFocused && !isPaused) {
         videoRef.current.playAsync();
+        videoRef.current.setIsLoopingAsync(true);  // Ensure looping is set when playing
       } else {
         videoRef.current.pauseAsync();
       }
@@ -85,24 +93,40 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
     setIsPaused(prev => !prev);
   }, []);
 
+  const handleStartChat = () => {
+    if (!user || !pet) return;
+
+    // Close the pet profile modal first
+    onClose();
+
+    // Then navigate to the chat
+    router.push({
+      pathname: "/(app)/chat/[chatId]",
+      params: {
+        chatId: pet.id,
+        petName: pet.name,
+        petImage: pet.photos[0] || pet.videoUrl,
+        ownerName: pet.owner.name
+      }
+    });
+  };
+
   return (
     <ScrollView style={containerStyle}>
-      <View style={styles.header}>
-        <Button
-          onPress={onClose}
+      <View style={styles.videoContainer}>
+        <Pressable 
           style={styles.backButton}
+          onPress={onClose}
         >
           <View style={styles.backButtonContent}>
             <Ionicons 
               name="arrow-back"
               size={24}
-              color={Colors[theme].text}
+              color="#fff"
             />
           </View>
-        </Button>
-      </View>
+        </Pressable>
 
-      <View style={styles.videoContainer}>
         <Pressable 
           onPress={togglePlayPause}
           style={StyleSheet.absoluteFill}
@@ -200,6 +224,14 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
             )}
           </View>
         </View>
+
+        <Pressable 
+          style={styles.chatButton}
+          onPress={handleStartChat}
+        >
+          <Ionicons name="chatbubble" size={20} color="#fff" style={styles.chatIcon} />
+          <Text style={styles.chatButtonText}>Chat with Owner</Text>
+        </Pressable>
       </View>
     </ScrollView>
   );
@@ -208,36 +240,6 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 1,
-    padding: 16,
-    paddingTop: 60,
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  backButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 36,
-    minHeight: 36,
   },
   videoContainer: {
     width: '100%',
@@ -360,5 +362,40 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  chatButton: {
+    backgroundColor: Colors.light.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  chatButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  chatIcon: {
+    marginRight: 4,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 }); 

@@ -10,7 +10,11 @@ export function useFavorites(userId: string) {
   const { pets } = usePets();
 
   const fetchFavorites = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) {
+      setLoading(false);
+      setFavorites([]);
+      return;
+    }
     
     try {
       setLoading(true);
@@ -23,28 +27,35 @@ export function useFavorites(userId: string) {
         setFavorites(favoritePets);
       } else {
         // Initialize user document with empty favorites array
-        await setDoc(doc(db, 'users', userId), { favorites: [] });
+        await setDoc(doc(db, 'users', userId), { favorites: [] }, { merge: true });
         setFavorites([]);
       }
       setError(null);
     } catch (err) {
       console.error('Error fetching favorites:', err);
       setError('Failed to fetch favorites');
+      setFavorites([]);
     } finally {
       setLoading(false);
     }
   }, [userId, pets]);
 
-  // Fetch favorites on mount and when pets change
+  // Fetch favorites on mount and when pets or userId changes
   useEffect(() => {
-    if (pets.length > 0) {
+    if (pets.length > 0 && userId) {
       fetchFavorites();
+    } else if (!userId) {
+      setFavorites([]);
+      setLoading(false);
     }
-  }, [pets, fetchFavorites]);
+  }, [pets, fetchFavorites, userId]);
 
   // Add to favorites
   const addFavorite = useCallback(async (petId: string) => {
-    if (!userId) return;
+    if (!userId) {
+      setError('Please sign in to add favorites');
+      return;
+    }
 
     try {
       const db = getFirestore();
@@ -57,6 +68,7 @@ export function useFavorites(userId: string) {
       if (newFavoritePet) {
         setFavorites(prev => [...prev, newFavoritePet]);
       }
+      setError(null);
     } catch (err) {
       console.error('Error adding favorite:', err);
       setError('Failed to add favorite');
@@ -65,7 +77,10 @@ export function useFavorites(userId: string) {
 
   // Remove from favorites
   const removeFavorite = useCallback(async (petId: string) => {
-    if (!userId) return;
+    if (!userId) {
+      setError('Please sign in to manage favorites');
+      return;
+    }
 
     try {
       const db = getFirestore();
@@ -75,6 +90,7 @@ export function useFavorites(userId: string) {
       }, { merge: true });
 
       setFavorites(prev => prev.filter(pet => pet.id !== petId));
+      setError(null);
     } catch (err) {
       console.error('Error removing favorite:', err);
       setError('Failed to remove favorite');
@@ -83,8 +99,19 @@ export function useFavorites(userId: string) {
 
   // Check if a pet is favorited
   const isFavorite = useCallback((petId: string) => {
+    if (!userId) return false;
     return favorites.some(pet => pet.id === petId);
-  }, [favorites]);
+  }, [favorites, userId]);
+
+  // Refresh favorites
+  const refresh = useCallback(async () => {
+    if (!userId) {
+      setFavorites([]);
+      setLoading(false);
+      return;
+    }
+    await fetchFavorites();
+  }, [userId, fetchFavorites]);
 
   return {
     favorites,
@@ -93,6 +120,6 @@ export function useFavorites(userId: string) {
     addFavorite,
     removeFavorite,
     isFavorite,
-    refresh: fetchFavorites
+    refresh
   };
 } 

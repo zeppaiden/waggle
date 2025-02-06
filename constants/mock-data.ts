@@ -1,3 +1,9 @@
+export type Owner = {
+  id: string;
+  name: string;
+  verified: boolean;
+};
+
 export type Pet = {
   id: string;
   videoUrl: string;
@@ -8,10 +14,7 @@ export type Pet = {
   breed: string;
   description: string;
   interests: string[];
-  owner: {
-    name: string;
-    verified: boolean;
-  };
+  owner: Owner;
   photos: string[];
   species: 'dog' | 'cat' | 'bunny' | 'other';
   size: 'small' | 'medium' | 'large';
@@ -37,6 +40,7 @@ export const MOCK_PETS: Pet[] = [
     description: 'Friendly and energetic pup who loves to play fetch and go on long walks. Great with kids and other dogs!',
     interests: ['Fetch', 'Swimming', 'Park Visits', 'Treats'],
     owner: {
+      id: '1',
       name: 'Sarah',
       verified: true,
     },
@@ -59,6 +63,7 @@ export const MOCK_PETS: Pet[] = [
     description: 'A gentle and affectionate cat who loves cuddles. Perfectly house-trained and great with other cats.',
     interests: ['Napping', 'Bird Watching', 'Laser Games', 'Treats'],
     owner: {
+      id: '2',
       name: 'Emma',
       verified: true,
     },
@@ -81,6 +86,7 @@ export const MOCK_PETS: Pet[] = [
     description: 'Playful and social Frenchie looking for friends. Loves belly rubs and short walks in the park.',
     interests: ['Belly Rubs', 'Short Walks', 'Toys', 'Naps'],
     owner: {
+      id: '3',
       name: 'Mike',
       verified: false,
     },
@@ -116,6 +122,7 @@ export const MOCK_FAVORITE_PETS: Pet[] = [
     description: 'Sweet and playful kitten who loves attention and playing with string toys.',
     interests: ['String Toys', 'Cuddles', 'Window Watching', 'Treats'],
     owner: {
+      id: '4',
       name: 'Lisa',
       verified: true,
     },
@@ -138,6 +145,7 @@ export const MOCK_FAVORITE_PETS: Pet[] = [
     description: 'Intelligent and loyal companion, great with training and outdoor activities.',
     interests: ['Training', 'Running', 'Ball Games', 'Car Rides'],
     owner: {
+      id: '5',
       name: 'John',
       verified: true,
     },

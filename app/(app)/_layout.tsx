@@ -21,29 +21,21 @@ export default function AppLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen
         name="(tabs)"
-        options={{
-          headerShown: false,
-        }}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="chat/[chatId]"
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="pet/[petId]"
         options={{
+          headerShown: false,
           presentation: 'modal',
-          animation: 'slide_from_bottom',
-        }}
-      />
-      <Stack.Screen
-        name="chat/[chatId]"
-        options={{
-          presentation: 'card',
-          animation: 'slide_from_right',
+          animation: 'slide_from_bottom'
         }}
       />
     </Stack>
