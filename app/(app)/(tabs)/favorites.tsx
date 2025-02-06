@@ -9,12 +9,16 @@ import { BlurView } from 'expo-blur';
 import { useFavorites } from '@/hooks/useFavorites';
 import { Colors } from '@/constants/colors-theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { PulsingPaw } from '@/components/ui/PulsingPaw';
 
 type PetSpecies = 'dog' | 'cat' | 'bunny' | 'other';
 type PetSize = 'small' | 'medium' | 'large';
 
 // TODO: Replace with actual user ID from authentication
 const TEMP_USER_ID = 'user123';
+
+// Add a constant for the phthalo green color
+const PHTHALO_GREEN = '#123524';
 
 type VideoCardProps = {
   videoUrl: string;
@@ -74,9 +78,7 @@ function VideoCard({ videoUrl }: VideoCardProps) {
         isMuted={true}
       />
       {(!isVideoLoaded && !hasError) && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#fff" />
-        </View>
+        <PulsingPaw />
       )}
       {hasError && (
         <View style={styles.errorOverlay}>
@@ -306,7 +308,7 @@ export default function FavoritesScreen() {
                     <Ionicons 
                       name="heart"
                       size={20} 
-                      color="white" 
+                      color="#FF2D55" 
                     />
                   </Animated.View>
                 </Pressable>
@@ -321,7 +323,7 @@ export default function FavoritesScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color={Colors[theme].text} />
+        <PulsingPaw size={60} backgroundColor="transparent" />
       </View>
     );
   }
@@ -442,7 +444,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
   },
   filterButtonActive: {
-    backgroundColor: '#000',
+    backgroundColor: PHTHALO_GREEN,
   },
   filterButtonText: {
     fontSize: 15,
@@ -489,6 +491,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 12,
+    backgroundColor: 'rgba(18, 53, 36, 0.5)', // Phthalo green with opacity
   },
   petName: {
     color: '#fff',

@@ -1,11 +1,13 @@
-import { View, StyleSheet, ScrollView, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, Pressable, ActivityIndicator, Animated as RNAnimated } from 'react-native';
 import { Text, Button } from '@/components/themed';
 import { Colors } from '@/constants/colors-theme';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { Pet } from '@/constants/mock-data';
+import { useIsFocused } from '@react-navigation/native';
+import { PulsingPaw } from '@/components/ui/PulsingPaw';
 
 interface PetProfileProps {
   pet: Pet;
@@ -15,11 +17,73 @@ interface PetProfileProps {
 export function PetProfile({ pet, onClose }: PetProfileProps) {
   const colorScheme = useColorScheme();
   const theme = colorScheme ?? 'light';
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const videoRef = useRef<Video>(null);
+  const isFocused = useIsFocused();
 
   const containerStyle = useMemo(() => [
     styles.container,
     { backgroundColor: Colors[theme].background }
   ], [theme]);
+
+  // Reset states when URL changes
+  useEffect(() => {
+    setIsVideoLoaded(false);
+    setHasError(false);
+    setIsPaused(false);
+    
+    // Attempt to load and play video immediately
+    if (videoRef.current) {
+      videoRef.current.loadAsync(
+        { 
+          uri: pet.videoUrl,
+          overrideFileExtensionAndroid: 'm3u8'
+        },
+        { shouldPlay: isFocused && !isPaused },
+        false
+      );
+    }
+  }, [pet.videoUrl]);
+
+  // Handle screen focus/unfocus
+  useEffect(() => {
+    if (videoRef.current && isVideoLoaded) {
+      if (isFocused && !isPaused) {
+        videoRef.current.playAsync();
+      } else {
+        videoRef.current.pauseAsync();
+      }
+    }
+  }, [isFocused, isVideoLoaded, isPaused]);
+
+  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+    if ('error' in status) {
+      console.error('[PetProfile] Video playback error:', status.error);
+      setHasError(true);
+      setIsVideoLoaded(false);
+      return;
+    }
+
+    if (status.isLoaded) {
+      if (!isVideoLoaded) {
+        console.log('[PetProfile] Video loaded successfully');
+        setIsVideoLoaded(true);
+        setHasError(false);
+      }
+    }
+  }, [isVideoLoaded]);
+
+  const handleError = useCallback(() => {
+    console.error('[PetProfile] Video loading error');
+    setHasError(true);
+    setIsVideoLoaded(false);
+  }, []);
+
+  const togglePlayPause = useCallback(() => {
+    setIsPaused(prev => !prev);
+  }, []);
 
   return (
     <ScrollView style={containerStyle}>
@@ -38,13 +102,46 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
         </Button>
       </View>
 
-      <Video
-        source={{ uri: pet.videoUrl }}
-        style={styles.video}
-        shouldPlay
-        isLooping
-        resizeMode={ResizeMode.COVER}
-      />
+      <View style={styles.videoContainer}>
+        <Pressable 
+          onPress={togglePlayPause}
+          style={StyleSheet.absoluteFill}
+        >
+          <Video
+            ref={videoRef}
+            source={{ 
+              uri: pet.videoUrl,
+              overrideFileExtensionAndroid: 'm3u8'
+            }}
+            style={[
+              styles.video,
+              { opacity: isVideoLoaded ? 1 : 0 }
+            ]}
+            shouldPlay={isFocused && !isPaused}
+            isLooping
+            isMuted={false}
+            resizeMode={ResizeMode.COVER}
+            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+            onError={handleError}
+            useNativeControls={false}
+            progressUpdateIntervalMillis={500}
+          />
+          {isVideoLoaded && isPaused && (
+            <View style={styles.pauseOverlay}>
+              <Ionicons name="play" size={50} color="white" />
+            </View>
+          )}
+        </Pressable>
+        {(!isVideoLoaded && !hasError) && (
+          <PulsingPaw />
+        )}
+        {hasError && (
+          <View style={styles.errorOverlay}>
+            <Ionicons name="alert-circle-outline" size={32} color="#fff" />
+            <Text style={styles.errorText}>Failed to load video</Text>
+          </View>
+        )}
+      </View>
 
       <View style={styles.content}>
         <View style={styles.titleRow}>
@@ -142,6 +239,12 @@ const styles = StyleSheet.create({
     minWidth: 36,
     minHeight: 36,
   },
+  videoContainer: {
+    width: '100%',
+    height: 400,
+    backgroundColor: '#123524',
+    position: 'relative',
+  },
   video: {
     width: '100%',
     height: 400,
@@ -234,5 +337,28 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
-  }
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 8,
+  },
+  pauseOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 }); 

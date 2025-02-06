@@ -1,4 +1,4 @@
-import { View, StyleSheet, Dimensions, Image, SafeAreaView, Pressable, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Dimensions, Image, SafeAreaView, Pressable, ActivityIndicator, Animated as RNAnimated } from 'react-native';
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Text } from '@/components/themed';
@@ -23,6 +23,8 @@ import { useRouter } from 'expo-router';
 import { usePets } from '@/hooks/usePets';
 import { Ionicons } from '@expo/vector-icons';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useIsFocused } from '@react-navigation/native';
+import { PulsingPaw } from '@/components/ui/PulsingPaw';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.5;
@@ -44,69 +46,109 @@ type VideoCardProps = {
 
 function VideoCard({ videoUrl, shouldPlay = true }: VideoCardProps) {
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
+  const [hasError, setHasError] = useState(false);  const [isPaused, setIsPaused] = useState(false);
   const videoRef = useRef<Video | null>(null);
+  const isFocused = useIsFocused();
 
-  // Reset states when URL or playback state changes
+  // Reset states when URL changes
   useEffect(() => {
     setIsVideoLoaded(false);
     setHasError(false);
-  }, [videoUrl, shouldPlay]);
+    setIsPaused(false);
+    
+    // Attempt to load and play video immediately
+    if (videoRef.current) {
+      videoRef.current.loadAsync(
+        { 
+          uri: videoUrl,
+          overrideFileExtensionAndroid: 'm3u8'
+        },
+        { shouldPlay: isFocused && !isPaused },
+        false
+      );
+    }
+  }, [videoUrl]);
 
-  // Stop video playback when component unmounts or shouldPlay changes to false
+  // Handle screen focus/unfocus
+  useEffect(() => {
+    if (videoRef.current && isVideoLoaded) {
+      if (isFocused && !isPaused) {
+        videoRef.current.playAsync();
+      } else {
+        videoRef.current.pauseAsync();
+      }
+    }
+  }, [isFocused, isVideoLoaded, isPaused]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (videoRef.current) {
-        videoRef.current.stopAsync();
+        videoRef.current.unloadAsync();
       }
     };
   }, []);
 
-  useEffect(() => {
-    if (!shouldPlay && videoRef.current) {
-      videoRef.current.stopAsync();
+  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+    if ('error' in status) {
+      console.error('[VideoCard] Playback error:', status.error);
+      setHasError(true);
+      setIsVideoLoaded(false);
+      return;
     }
-  }, [shouldPlay]);
 
-  const handleLoad = useCallback(() => {
-    console.log('Video loaded:', videoUrl, 'shouldPlay:', shouldPlay);
-    setIsVideoLoaded(true);
-    setHasError(false);
-  }, [videoUrl, shouldPlay]);
+    if (status.isLoaded) {
+      if (!isVideoLoaded) {
+        console.log('[VideoCard] Video loaded successfully');
+        setIsVideoLoaded(true);
+        setHasError(false);
+      }
+    }
+  }, [isVideoLoaded]);
 
   const handleError = useCallback((error: string | undefined) => {
-    console.error('Error loading video:', videoUrl, error);
+    console.error('[VideoCard] Error loading video:', error);
     setHasError(true);
     setIsVideoLoaded(false);
-  }, [videoUrl]);
+  }, []);
 
-  // Preload video without playing
-  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (status.isLoaded && !isVideoLoaded) {
-      handleLoad();
-    }
-  }, [handleLoad, isVideoLoaded]);
+  const togglePlayPause = useCallback(() => {
+    setIsPaused(prev => !prev);
+  }, []);
   
   return (
     <View style={[StyleSheet.absoluteFill, styles.videoContainer]}>
-      <Video
-        ref={videoRef}
-        source={{ uri: videoUrl }}
-        style={[
-          StyleSheet.absoluteFill,
-          !isVideoLoaded && { opacity: 0 }
-        ]}
-        resizeMode={ResizeMode.COVER}
-        shouldPlay={shouldPlay && isVideoLoaded}
-        isLooping={true}
-        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-        onError={handleError}
-        isMuted={true}
-      />
+      <Pressable 
+        onPress={togglePlayPause}
+        style={StyleSheet.absoluteFill}
+      >
+        <Video
+          ref={videoRef}
+          source={{ 
+            uri: videoUrl,
+            overrideFileExtensionAndroid: 'm3u8'
+          }}
+          style={[
+            StyleSheet.absoluteFill,
+            { opacity: isVideoLoaded ? 1 : 0 }
+          ]}
+          resizeMode={ResizeMode.COVER}
+          shouldPlay={isFocused && !isPaused}
+          isLooping={true}
+          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+          onError={handleError}
+          isMuted={true}
+          useNativeControls={false}
+          progressUpdateIntervalMillis={500}
+        />
+        {isVideoLoaded && isPaused && (
+          <View style={styles.pauseOverlay}>
+            <Ionicons name="play" size={50} color="white" />
+          </View>
+        )}
+      </Pressable>
       {(!isVideoLoaded && !hasError) && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#fff" />
-        </View>
+        <PulsingPaw />
       )}
       {hasError && (
         <View style={styles.errorOverlay}>
@@ -143,14 +185,6 @@ function PetCard({ pet, style, isNext = false }: PetCardProps) {
   );
 }
 
-function prefetchImages(photos: string[]) {
-  photos.forEach(photo => {
-    Image.prefetch(photo).catch((error) => {
-      console.error('Failed to prefetch image:', error);
-    });
-  });
-}
-
 export default function DiscoverScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const colorScheme = useColorScheme();
@@ -165,10 +199,10 @@ export default function DiscoverScreen() {
   const scale = useSharedValue(0.9);
 
   const handleSwipeLeft = useCallback(() => {
-    // Animate the card off screen to the left
-    x.value = withSpring(-SCREEN_WIDTH * 1.5, { damping: 20, stiffness: 200 });
-    y.value = withSpring(0, { damping: 20, stiffness: 200 });
-    rotation.value = withSpring(-10, { damping: 20, stiffness: 200 });
+    // Reduce stiffness from 200 to 100 for smoother animation
+    x.value = withSpring(-SCREEN_WIDTH * 1.5, { damping: 20, stiffness: 100 });
+    y.value = withSpring(0, { damping: 20, stiffness: 100 });
+    rotation.value = withSpring(-10, { damping: 20, stiffness: 100 });
     
     // After animation, reset and update index
     setTimeout(() => {
@@ -187,10 +221,10 @@ export default function DiscoverScreen() {
       addFavorite(currentPet.id);
     }
 
-    // Animate the card off screen to the right
-    x.value = withSpring(SCREEN_WIDTH * 1.5, { damping: 20, stiffness: 200 });
-    y.value = withSpring(0, { damping: 20, stiffness: 200 });
-    rotation.value = withSpring(10, { damping: 20, stiffness: 200 });
+    // Reduce stiffness from 200 to 100 for smoother animation
+    x.value = withSpring(SCREEN_WIDTH * 1.5, { damping: 20, stiffness: 100 });
+    y.value = withSpring(0, { damping: 20, stiffness: 100 });
+    rotation.value = withSpring(10, { damping: 20, stiffness: 100 });
     
     // After animation, reset and update index
     setTimeout(() => {
@@ -231,15 +265,18 @@ export default function DiscoverScreen() {
         runOnJS(handleSwipeUp)(pets[currentIndex].id);
       } else if (Math.abs(event.translationX) > SWIPE_THRESHOLD) {
         // Horizontal swipe - next card
-        x.value = withSpring(Math.sign(event.translationX) * SCREEN_WIDTH * 1.5);
-        y.value = withSpring(0);
+        x.value = withSpring(Math.sign(event.translationX) * SCREEN_WIDTH * 1.5, { 
+          damping: 20, 
+          stiffness: 100  // Reduce stiffness here too
+        });
+        y.value = withSpring(0, { damping: 20, stiffness: 100 });
         scale.value = withTiming(1, { duration: 300 });
         runOnJS(event.translationX > 0 ? handleSwipeRight : handleSwipeLeft)();
     } else {
-        // Reset position
-        x.value = withSpring(0);
-        y.value = withSpring(0);
-        rotation.value = withSpring(0);
+        // Reset position with reduced stiffness
+        x.value = withSpring(0, { damping: 20, stiffness: 100 });
+        y.value = withSpring(0, { damping: 20, stiffness: 100 });
+        rotation.value = withSpring(0, { damping: 20, stiffness: 100 });
         scale.value = withTiming(0.9, { duration: 300 });
       }
     });
@@ -272,15 +309,6 @@ export default function DiscoverScreen() {
 
   const currentPet = pets[currentIndex];
   const nextPet = pets[(currentIndex + 1) % pets.length];
-
-  useEffect(() => {
-    if (currentIndex < pets.length - 1) {
-      // Prefetch next pet's images
-      if (nextPet) {
-        prefetchImages(nextPet.photos);
-      }
-    }
-  }, [currentIndex, pets]);
 
   const containerStyle = useMemo(() => [
     styles.container,
@@ -492,5 +520,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: 8,
     fontSize: 14,
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: '#fff',
+    marginTop: 4,
+    textAlign: 'center',
+    opacity: 0.8,
+  },
+  pauseOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
