@@ -1,22 +1,105 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { View, TextInput, StyleSheet, Alert } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { Link, router } from 'expo-router';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/configs/firebase';
 import { Colors } from '@/constants/colors-theme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useAuth } from '@/contexts/auth';
+
+interface ValidationErrors {
+  email?: string;
+  password?: string;
+}
 
 export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState<ValidationErrors>({});
   const [loading, setLoading] = useState(false);
+  const { setTempRegistration } = useAuth();
+
+  const validateEmail = useCallback((email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim()) {
+      return 'Email is required';
+    }
+    if (!emailRegex.test(email)) {
+      return 'Please enter a valid email address';
+    }
+    if (email.length > 255) {
+      return 'Email is too long';
+    }
+    return '';
+  }, []);
+
+  const validatePassword = useCallback((password: string) => {
+    if (!password.trim()) {
+      return 'Password is required';
+    }
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters long';
+    }
+    if (!/[A-Z]/.test(password)) {
+      return 'Password must contain at least one uppercase letter';
+    }
+    if (!/[a-z]/.test(password)) {
+      return 'Password must contain at least one lowercase letter';
+    }
+    if (!/[0-9]/.test(password)) {
+      return 'Password must contain at least one number';
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+      return 'Password must contain at least one special character';
+    }
+    return '';
+  }, []);
+
+  const handleEmailChange = useCallback((text: string) => {
+    setEmail(text);
+    const error = validateEmail(text);
+    setErrors(prev => ({
+      ...prev,
+      email: error,
+    }));
+  }, [validateEmail]);
+
+  const handlePasswordChange = useCallback((text: string) => {
+    setPassword(text);
+    const error = validatePassword(text);
+    setErrors(prev => ({
+      ...prev,
+      password: error,
+    }));
+  }, [validatePassword]);
 
   const handleSignUp = async () => {
     try {
       setLoading(true);
-      await createUserWithEmailAndPassword(auth, email, password);
-      // Navigation will be handled by AuthLayout based on onboarding status
+      
+      // Validate both fields
+      const emailError = validateEmail(email);
+      const passwordError = validatePassword(password);
+      
+      const newErrors = {
+        email: emailError,
+        password: passwordError,
+      };
+      
+      setErrors(newErrors);
+
+      // If there are any errors, don't proceed
+      if (emailError || passwordError) {
+        return;
+      }
+
+      // Store temporary registration data
+      setTempRegistration({
+        email: email.trim(),
+        password: password.trim(),
+      });
+
+      // Navigate to onboarding
+      router.push('/onboarding');
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
@@ -32,40 +115,48 @@ export default function SignUp() {
       </View>
       
       <View style={styles.formContainer}>
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, errors.email ? styles.inputError : undefined]}>
           <IconSymbol 
             name="envelope.fill" 
             size={20} 
-            color={Colors.light.secondary}
+            color={errors.email ? '#ff3b30' : Colors.light.secondary}
             style={styles.inputIcon}
           />
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.email && styles.inputTextError]}
             placeholder="Email"
-            placeholderTextColor={Colors.light.secondary}
+            placeholderTextColor={errors.email ? '#ff3b30' : Colors.light.secondary}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={handleEmailChange}
             autoCapitalize="none"
             keyboardType="email-address"
+            autoComplete="email"
           />
         </View>
+        {errors.email ? (
+          <Text style={styles.errorText}>{errors.email}</Text>
+        ) : null}
         
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, errors.password ? styles.inputError : undefined]}>
           <IconSymbol 
             name="lock.fill" 
             size={20} 
-            color={Colors.light.secondary}
+            color={errors.password ? '#ff3b30' : Colors.light.secondary}
             style={styles.inputIcon}
           />
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.password && styles.inputTextError]}
             placeholder="Password"
-            placeholderTextColor={Colors.light.secondary}
+            placeholderTextColor={errors.password ? '#ff3b30' : Colors.light.secondary}
             value={password}
-            onChangeText={setPassword}
+            onChangeText={handlePasswordChange}
             secureTextEntry
+            autoComplete="new-password"
           />
         </View>
+        {errors.password ? (
+          <Text style={styles.errorText}>{errors.password}</Text>
+        ) : null}
       
         <Button
           mode="contained"
@@ -74,6 +165,7 @@ export default function SignUp() {
           style={styles.button}
           contentStyle={styles.buttonContent}
           labelStyle={styles.buttonText}
+          disabled={loading || !!errors.email || !!errors.password}
         >
           {loading ? 'Creating Pawfile...' : 'Create Account'}
         </Button>
@@ -185,5 +277,18 @@ const styles = StyleSheet.create({
   paw3: {
     transform: [{ rotate: '-5deg' }],
     marginLeft: -10,
+  },
+  inputError: {
+    borderColor: '#ff3b30',
+  },
+  inputTextError: {
+    color: '#ff3b30',
+  },
+  errorText: {
+    color: '#ff3b30',
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 12,
+    marginLeft: 16,
   },
 }); 

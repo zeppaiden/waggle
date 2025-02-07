@@ -84,6 +84,7 @@ export default function OnboardingFlow({ onComplete, initialData = {} }: Onboard
           <IdentificationStep
             data={userData}
             onNext={handleNext}
+            onBack={handleBack}
           />
         );
       case 'roleSelection':
@@ -91,6 +92,7 @@ export default function OnboardingFlow({ onComplete, initialData = {} }: Onboard
           <RoleSelectionStep
             data={userData}
             onNext={handleNext}
+            onBack={handleBack}
           />
         );
       case 'buyerPreferences':

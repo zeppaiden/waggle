@@ -1,9 +1,29 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { Text, Button } from '@/components/themed';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, SafeAreaView, ScrollView, Pressable, Dimensions } from 'react-native';
+import { Text } from '@/components/themed';
 import { UserProfile, PetType, SizePreference, ActivityLevel, ExperienceLevel, LivingSpace } from '@/types/user';
 import { Colors } from '@/constants/colors-theme';
 import Slider from '@react-native-community/slider';
+import { 
+  Dog, 
+  Cat, 
+  Bird, 
+  Rabbit, 
+  Fish, 
+  PawPrint, 
+  Building2, 
+  Home, 
+  Trees, 
+  MoreHorizontal,
+  ArrowLeft,
+  ArrowRight,
+} from 'lucide-react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CHIP_SPACING = 8;
+const CHIPS_PER_ROW = 3;
+const CHIP_WIDTH = (SCREEN_WIDTH - 48 - (CHIPS_PER_ROW - 1) * CHIP_SPACING) / CHIPS_PER_ROW;
 
 interface BuyerPreferencesStepProps {
   data: Partial<UserProfile>;
@@ -11,19 +31,72 @@ interface BuyerPreferencesStepProps {
   onBack: () => void;
 }
 
-const PET_TYPES: PetType[] = ['DOG', 'CAT', 'BIRD', 'RABBIT', 'FISH', 'OTHER'];
+type IconComponent = typeof Dog;
+
+const PET_TYPES: { value: PetType; Icon: IconComponent; label: string }[] = [
+  { 
+    value: 'DOG',
+    Icon: Dog,
+    label: 'Dogs'
+  },
+  { 
+    value: 'CAT',
+    Icon: Cat,
+    label: 'Cats'
+  },
+  { 
+    value: 'BIRD',
+    Icon: Bird,
+    label: 'Birds'
+  },
+  { 
+    value: 'RABBIT',
+    Icon: Rabbit,
+    label: 'Rabbits'
+  },
+  { 
+    value: 'FISH',
+    Icon: Fish,
+    label: 'Fish'
+  },
+  { 
+    value: 'OTHER',
+    Icon: PawPrint,
+    label: 'Other Pets'
+  },
+];
+
 const SIZE_PREFERENCES: SizePreference[] = ['small', 'medium', 'large', 'any'];
 const ACTIVITY_LEVELS: ActivityLevel[] = ['low', 'moderate', 'high', 'any'];
 const EXPERIENCE_LEVELS: ExperienceLevel[] = ['beginner', 'intermediate', 'expert'];
-const LIVING_SPACES: LivingSpace[] = ['apartment', 'house', 'farm', 'other'];
+const LIVING_SPACES: { value: LivingSpace; Icon: IconComponent }[] = [
+  { value: 'apartment', Icon: Building2 },
+  { value: 'house', Icon: Home },
+  { value: 'farm', Icon: Trees },
+  { value: 'other', Icon: MoreHorizontal },
+];
 
 // Add type for slider value
 type SliderValue = number;
 
 export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPreferencesStepProps) {
+  console.log('BuyerPreferencesStep props:', {
+    hasData: !!data,
+    dataKeys: data ? Object.keys(data) : [],
+    hasOnNext: !!onNext,
+    hasOnBack: !!onBack
+  });
+
+  useEffect(() => {
+    console.log('BuyerPreferencesStep mounted');
+    return () => {
+      console.log('BuyerPreferencesStep unmounted');
+    };
+  }, []);
+
   const [preferences, setPreferences] = useState({
     petTypes: data.buyerPreferences?.petTypes || [],
-    sizePreferences: data.buyerPreferences?.sizePreferences || [],
+    sizePreferences: data.buyerPreferences?.sizePreferences || ['any'],
     activityLevel: data.buyerPreferences?.activityLevel || 'any',
     maxDistance: data.buyerPreferences?.maxDistance || 50,
     experienceLevel: data.buyerPreferences?.experienceLevel || 'beginner',
@@ -33,6 +106,8 @@ export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPref
     ageRange: data.buyerPreferences?.ageRange || { min: 0, max: 20 },
   });
 
+  console.log('Current preferences state:', preferences);
+
   const handleNext = () => {
     onNext({
       ...data,
@@ -40,290 +115,420 @@ export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPref
     });
   };
 
-  const togglePetType = (type: PetType) => {
-    setPreferences(prev => ({
-      ...prev,
-      petTypes: prev.petTypes.includes(type)
-        ? prev.petTypes.filter(t => t !== type)
-        : [...prev.petTypes, type],
-    }));
+  const renderPetTypeChip = (type: PetType, Icon: IconComponent, label: string) => {
+    console.log('Rendering pet type chip:', { type, label });
+    const isSelected = preferences.petTypes.includes(type);
+    return (
+      <Pressable
+        key={type}
+        style={[
+          styles.iconChip,
+          isSelected && styles.iconChipSelected
+        ]}
+        onPress={() => setPreferences(prev => ({
+          ...prev,
+          petTypes: prev.petTypes.includes(type)
+            ? prev.petTypes.filter(t => t !== type)
+            : [...prev.petTypes, type]
+        }))}
+      >
+        <View style={[styles.iconContainer, isSelected && styles.iconContainerSelected]}>
+          <Icon 
+            size={32} 
+            color={isSelected ? '#fff' : Colors.light.primary}
+            strokeWidth={1.5}
+          />
+        </View>
+        <Text style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}>
+          {label}
+        </Text>
+      </Pressable>
+    );
   };
 
-  const toggleSizePreference = (size: SizePreference) => {
-    setPreferences(prev => ({
-      ...prev,
-      sizePreferences: prev.sizePreferences.includes(size)
-        ? prev.sizePreferences.filter(s => s !== size)
-        : [...prev.sizePreferences, size],
-    }));
+  const renderLivingSpaceChip = (space: LivingSpace, Icon: IconComponent) => {
+    console.log('Rendering living space chip:', space);
+    const isSelected = preferences.livingSpace === space;
+    return (
+      <Pressable
+        key={space}
+        style={[
+          styles.iconChip,
+          isSelected && styles.iconChipSelected
+        ]}
+        onPress={() => setPreferences(prev => ({ ...prev, livingSpace: space }))}
+      >
+        <View style={[styles.iconContainer, isSelected && styles.iconContainerSelected]}>
+          <Icon 
+            size={28} 
+            color={isSelected ? '#fff' : Colors.light.primary}
+            strokeWidth={1.5}
+          />
+        </View>
+        <Text style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}>
+          {space.charAt(0).toUpperCase() + space.slice(1)}
+        </Text>
+      </Pressable>
+    );
   };
 
   const renderChip = (
     label: string,
     selected: boolean,
     onPress: () => void,
-    key?: string
   ) => (
     <Pressable
-      key={key || label}
-      style={[styles.chip, selected && styles.selectedChip]}
+      key={label}
+      style={[
+        styles.chip,
+        selected && styles.chipSelected
+      ]}
       onPress={onPress}
     >
-      <Text style={[styles.chipText, selected && styles.selectedChipText]}>
+      <Text style={[
+        styles.chipText,
+        selected && styles.chipTextSelected
+      ]}>
         {label.charAt(0).toUpperCase() + label.slice(1).toLowerCase()}
       </Text>
     </Pressable>
   );
 
+  const renderSection = (title: string, children: React.ReactNode) => {
+    console.log('Rendering section:', title);
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {children}
+      </View>
+    );
+  };
+
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>What types of pets are you interested in?</Text>
-        <View style={styles.chipGroup}>
-          {PET_TYPES.map(type => (
-            renderChip(
-              type,
-              preferences.petTypes.includes(type),
-              () => togglePetType(type),
-              type
-            )
-          ))}
+    <SafeAreaView style={styles.container}>
+      <Animated.View 
+        style={styles.content}
+        entering={FadeIn}
+        exiting={FadeOut}
+      >
+        <View style={styles.header}>
+          <Pressable 
+            style={styles.backButton}
+            onPress={onBack}
+          >
+            <ArrowLeft size={24} color="#666" strokeWidth={1.5} />
+          </Pressable>
         </View>
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>What size pets are you comfortable with?</Text>
-        <View style={styles.chipGroup}>
-          {SIZE_PREFERENCES.map(size => (
-            renderChip(
-              size,
-              preferences.sizePreferences.includes(size),
-              () => toggleSizePreference(size),
-              size
-            )
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Preferred pet activity level?</Text>
-        <View style={styles.chipGroup}>
-          {ACTIVITY_LEVELS.map(level => (
-            renderChip(
-              level,
-              preferences.activityLevel === level,
-              () => setPreferences(prev => ({ ...prev, activityLevel: level })),
-              level
-            )
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Your pet care experience level?</Text>
-        <View style={styles.chipGroup}>
-          {EXPERIENCE_LEVELS.map(level => (
-            renderChip(
-              level,
-              preferences.experienceLevel === level,
-              () => setPreferences(prev => ({ ...prev, experienceLevel: level })),
-              level
-            )
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Your living space?</Text>
-        <View style={styles.chipGroup}>
-          {LIVING_SPACES.map(space => (
-            renderChip(
-              space,
-              preferences.livingSpace === space,
-              () => setPreferences(prev => ({ ...prev, livingSpace: space })),
-              space
-            )
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Age Range (years)</Text>
-        <View style={styles.sliderContainer}>
-          <Text style={styles.sliderValue}>
-            {preferences.ageRange.min} - {preferences.ageRange.max} years
-          </Text>
-          <View style={styles.sliderRow}>
-            <Slider
-              style={styles.slider}
-              minimumValue={0}
-              maximumValue={20}
-              step={1}
-              value={preferences.ageRange.min}
-              onValueChange={(value: SliderValue) => setPreferences(prev => ({
-                ...prev,
-                ageRange: { ...prev.ageRange, min: value },
-              }))}
-              minimumTrackTintColor={Colors.light.primary}
-              maximumTrackTintColor="#e0e0e0"
-              thumbTintColor={Colors.light.primary}
-            />
-            <Slider
-              style={styles.slider}
-              minimumValue={0}
-              maximumValue={20}
-              step={1}
-              value={preferences.ageRange.max}
-              onValueChange={(value: SliderValue) => setPreferences(prev => ({
-                ...prev,
-                ageRange: { ...prev.ageRange, max: value },
-              }))}
-              minimumTrackTintColor={Colors.light.primary}
-              maximumTrackTintColor="#e0e0e0"
-              thumbTintColor={Colors.light.primary}
-            />
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Maximum Distance</Text>
-        <View style={styles.sliderContainer}>
-          <Text style={styles.sliderValue}>{preferences.maxDistance} miles</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={5}
-            maximumValue={100}
-            step={5}
-            value={preferences.maxDistance}
-            onValueChange={(value: SliderValue) => setPreferences(prev => ({
-              ...prev,
-              maxDistance: value,
-            }))}
-            minimumTrackTintColor={Colors.light.primary}
-            maximumTrackTintColor="#e0e0e0"
-            thumbTintColor={Colors.light.primary}
-          />
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Additional Information</Text>
-        <View style={styles.chipGroup}>
-          {renderChip(
-            'Have Children',
-            preferences.hasChildren,
-            () => setPreferences(prev => ({ ...prev, hasChildren: !prev.hasChildren }))
-          )}
-          {renderChip(
-            'Have Other Pets',
-            preferences.hasOtherPets,
-            () => setPreferences(prev => ({ ...prev, hasOtherPets: !prev.hasOtherPets }))
-          )}
-        </View>
-      </View>
-
-      <View style={styles.buttonContainer}>
-        <Button
-          onPress={onBack}
-          style={[styles.button, styles.backButton]}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
         >
-          <Text style={styles.backButtonText}>Back</Text>
-        </Button>
-        <Button
-          onPress={handleNext}
-          style={[styles.button, styles.nextButton]}
-        >
-          <Text style={styles.nextButtonText}>Next</Text>
-        </Button>
-      </View>
-    </ScrollView>
+          {renderSection('What types of pets are you interested in?', (
+            <View style={styles.iconChipGrid}>
+              {PET_TYPES.map(({ value, Icon, label }) => renderPetTypeChip(value, Icon, label))}
+            </View>
+          ))}
+
+          {renderSection('Your living space?', (
+            <View style={styles.iconChipGrid}>
+              {LIVING_SPACES.map(({ value, Icon }) => renderLivingSpaceChip(value, Icon))}
+            </View>
+          ))}
+
+          {renderSection('What size pets are you comfortable with?', (
+            <View style={styles.chipGroup}>
+              {SIZE_PREFERENCES.map(size => renderChip(
+                size,
+                preferences.sizePreferences.includes(size),
+                () => setPreferences(prev => ({
+                  ...prev,
+                  sizePreferences: prev.sizePreferences.includes(size)
+                    ? prev.sizePreferences.filter(s => s !== size)
+                    : [...prev.sizePreferences, size]
+                }))
+              ))}
+            </View>
+          ))}
+
+          {renderSection('Preferred pet activity level?', (
+            <View style={styles.chipGroup}>
+              {ACTIVITY_LEVELS.map(level => renderChip(
+                level,
+                preferences.activityLevel === level,
+                () => setPreferences(prev => ({ ...prev, activityLevel: level }))
+              ))}
+            </View>
+          ))}
+
+          {renderSection('Your pet care experience level?', (
+            <View style={styles.chipGroup}>
+              {EXPERIENCE_LEVELS.map(level => renderChip(
+                level,
+                preferences.experienceLevel === level,
+                () => setPreferences(prev => ({ ...prev, experienceLevel: level }))
+              ))}
+            </View>
+          ))}
+
+          {renderSection('Age Range (years)', (
+            <View style={styles.sliderContainer}>
+              <View style={styles.sliderHeader}>
+                <Text style={styles.sliderValue}>Min: {preferences.ageRange.min}</Text>
+                <Text style={styles.sliderValue}>Max: {preferences.ageRange.max}</Text>
+              </View>
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={20}
+                step={1}
+                value={preferences.ageRange.min}
+                onValueChange={(value) => setPreferences(prev => ({
+                  ...prev,
+                  ageRange: { ...prev.ageRange, min: value }
+                }))}
+                minimumTrackTintColor={Colors.light.primary}
+                maximumTrackTintColor="#e0e0e0"
+                thumbTintColor={Colors.light.primary}
+              />
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={20}
+                step={1}
+                value={preferences.ageRange.max}
+                onValueChange={(value) => setPreferences(prev => ({
+                  ...prev,
+                  ageRange: { ...prev.ageRange, max: value }
+                }))}
+                minimumTrackTintColor={Colors.light.primary}
+                maximumTrackTintColor="#e0e0e0"
+                thumbTintColor={Colors.light.primary}
+              />
+            </View>
+          ))}
+
+          {renderSection('Maximum Distance', (
+            <View style={styles.sliderContainer}>
+              <Text style={styles.sliderValue}>{preferences.maxDistance} miles</Text>
+              <Slider
+                style={styles.slider}
+                minimumValue={5}
+                maximumValue={100}
+                step={5}
+                value={preferences.maxDistance}
+                onValueChange={(value) => setPreferences(prev => ({
+                  ...prev,
+                  maxDistance: value
+                }))}
+                minimumTrackTintColor={Colors.light.primary}
+                maximumTrackTintColor="#e0e0e0"
+                thumbTintColor={Colors.light.primary}
+              />
+            </View>
+          ))}
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <Pressable
+            style={[styles.button, styles.nextButton]}
+            onPress={handleNext}
+          >
+            <Text style={styles.nextButtonText}>Next</Text>
+            <ArrowRight size={24} color="#fff" strokeWidth={1.5} style={styles.nextButtonIcon} />
+          </Pressable>
+        </View>
+      </Animated.View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
+  },
+  content: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 24,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '600',
-    marginBottom: 16,
-    color: '#333',
+    color: Colors.light.primary,
+    marginBottom: 20,
+  },
+  iconChipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: CHIP_SPACING,
+  },
+  iconChip: {
+    width: CHIP_WIDTH,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  iconChipSelected: {
+    borderColor: Colors.light.primary,
+    backgroundColor: Colors.light.primary + '08',
+    shadowColor: Colors.light.primary,
+    shadowOpacity: 0.12,
+  },
+  iconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.light.primary + '08',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  iconContainerSelected: {
+    backgroundColor: Colors.light.primary,
+  },
+  chipLabel: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  chipLabelSelected: {
+    color: Colors.light.primary,
+    fontWeight: '600',
   },
   chipGroup: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -4,
+    gap: 12,
   },
   chip: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    margin: 4,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  selectedChip: {
-    backgroundColor: Colors.light.primary,
+  chipSelected: {
+    backgroundColor: Colors.light.primary + '08',
     borderColor: Colors.light.primary,
   },
   chipText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
+    fontWeight: '500',
   },
-  selectedChipText: {
-    color: '#fff',
+  chipTextSelected: {
+    color: Colors.light.primary,
+    fontWeight: '600',
   },
   sliderContainer: {
-    marginTop: 8,
+    marginTop: 16,
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  sliderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   sliderValue: {
-    textAlign: 'center',
     fontSize: 16,
     color: '#666',
-    marginBottom: 8,
-  },
-  sliderRow: {
-    gap: 16,
+    fontWeight: '500',
   },
   slider: {
     width: '100%',
     height: 40,
   },
-  buttonContainer: {
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 32,
-    marginBottom: 24,
-  },
-  button: {
-    flex: 1,
-    height: 48,
-    borderRadius: 24,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   backButton: {
-    backgroundColor: '#f5f5f5',
-    marginRight: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  footer: {
+    flexDirection: 'row',
+    padding: 24,
+    paddingTop: 0,
+  },
+  button: {
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
   },
   nextButton: {
+    flex: 1,
     backgroundColor: Colors.light.primary,
-    marginLeft: 8,
-  },
-  backButtonText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: '600',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   nextButtonText: {
-    color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
+    color: '#fff',
+  },
+  nextButtonIcon: {
+    marginLeft: 4,
   },
 }); 

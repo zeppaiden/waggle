@@ -5,28 +5,66 @@ import { useRouter, useSegments } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
 
+type AuthSegment = 'sign-in' | 'sign-up' | 'onboarding' | 'tutorial';
+
 export default function AuthLayout() {
-  const { user, isLoading, isOnboarded } = useAuth();
-  const router = useRouter();
+  console.log('[AuthLayout] Rendering layout');
+  const { user, isLoading, isOnboarded, hasCompletedTutorial, tempRegistration } = useAuth();
   const segments = useSegments();
+  const router = useRouter();
 
   useEffect(() => {
+    console.log('[AuthLayout] Auth state changed:', {
+      isLoading,
+      hasUser: !!user,
+      isOnboarded,
+      hasCompletedTutorial,
+      hasTempRegistration: !!tempRegistration,
+      currentSegments: segments,
+    });
+
     if (isLoading) return;
 
-    // Immediately redirect if user is authenticated and onboarded
-    if (user && isOnboarded) {
-      router.replace('/(app)/(tabs)');
-      return;
-    }
+    const inAuthGroup = segments[0] === '(auth)';
+    const currentSegment = segments[1] as AuthSegment;
+    const inOnboarding = currentSegment === 'onboarding';
+    const inTutorial = currentSegment === 'tutorial';
 
-    // Only redirect to onboarding if user exists and isn't onboarded
-    if (user && !isOnboarded && segments[1] !== 'onboarding') {
-      router.replace('/(auth)/onboarding');
-    }
-  }, [user, isLoading, isOnboarded, segments]);
+    console.log('[AuthLayout] Current navigation state:', {
+      inAuthGroup,
+      currentSegment,
+      inOnboarding,
+      inTutorial,
+    });
 
-  // Show loading screen while checking auth state
-  if (isLoading || (user && isOnboarded)) {
+    if (!user) {
+      if (!inAuthGroup || (inOnboarding && !tempRegistration)) {
+        console.log('[AuthLayout] Redirecting to sign in (no user)');
+        router.replace('/(auth)/sign-in');
+      }
+    } else {
+      if (!isOnboarded) {
+        if (!inOnboarding) {
+          console.log('[AuthLayout] Redirecting to onboarding');
+          router.replace('/(auth)/onboarding');
+        }
+      } else if (!hasCompletedTutorial) {
+        if (!inTutorial) {
+          console.log('[AuthLayout] Redirecting to tutorial');
+          router.replace('/(auth)/tutorial');
+        }
+      } else {
+        if (inAuthGroup) {
+          console.log('[AuthLayout] Redirecting to main app');
+          router.replace('/(app)/(tabs)');
+        }
+      }
+    }
+  }, [user, isLoading, isOnboarded, hasCompletedTutorial, segments, tempRegistration]);
+
+  // Only show loading screen when checking initial auth state
+  if (isLoading) {
+    console.log('[AuthLayout] Showing loading screen');
     return (
       <View style={styles.loadingContainer}>
         <PulsingPaw size={60} backgroundColor="transparent" />
@@ -34,13 +72,42 @@ export default function AuthLayout() {
     );
   }
 
+  console.log('[AuthLayout] Rendering stack navigator');
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: 'fade',
+        animation: 'slide_from_right',
+        animationDuration: 200,
       }}
-    />
+    >
+      <Stack.Screen
+        name="sign-in"
+        options={{
+          title: 'Sign In',
+        }}
+      />
+      <Stack.Screen
+        name="sign-up"
+        options={{
+          title: 'Sign Up',
+        }}
+      />
+      <Stack.Screen
+        name="onboarding"
+        options={{
+          title: 'Onboarding',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="tutorial"
+        options={{
+          title: 'Tutorial',
+          gestureEnabled: false,
+        }}
+      />
+    </Stack>
   );
 }
 

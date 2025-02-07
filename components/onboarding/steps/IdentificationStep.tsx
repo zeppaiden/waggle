@@ -1,27 +1,22 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TextInput } from 'react-native';
-import { Text, Button } from '@/components/themed';
+import { View, StyleSheet, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { Text } from '@/components/themed';
 import { UserProfile } from '@/types/user';
 import { Colors } from '@/constants/colors-theme';
+import { ArrowLeft } from 'lucide-react-native';
+import { Pressable } from 'react-native';
 
 interface IdentificationStepProps {
   data: Partial<UserProfile>;
   onNext: (data: Partial<UserProfile>) => void;
+  onBack: () => void;
 }
 
-export default function IdentificationStep({ data, onNext }: IdentificationStepProps) {
+export default function IdentificationStep({ data, onNext, onBack }: IdentificationStepProps) {
   const [formData, setFormData] = useState({
     firstName: data.firstName || '',
     lastName: data.lastName || '',
     username: data.username || '',
-    dateOfBirth: data.dateOfBirth || '',
-    phoneNumber: data.phoneNumber || '',
-    address: {
-      city: data.address?.city || '',
-      state: data.address?.state || '',
-      zipCode: data.address?.zipCode || '',
-      country: data.address?.country || '',
-    },
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -38,21 +33,6 @@ export default function IdentificationStep({ data, onNext }: IdentificationStepP
     if (!formData.username.trim()) {
       newErrors.username = 'Username is required';
     }
-    if (!formData.dateOfBirth.trim()) {
-      newErrors.dateOfBirth = 'Date of birth is required';
-    }
-    if (!formData.address.city.trim()) {
-      newErrors.city = 'City is required';
-    }
-    if (!formData.address.state.trim()) {
-      newErrors.state = 'State is required';
-    }
-    if (!formData.address.zipCode.trim()) {
-      newErrors.zipCode = 'ZIP code is required';
-    }
-    if (!formData.address.country.trim()) {
-      newErrors.country = 'Country is required';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -68,157 +48,146 @@ export default function IdentificationStep({ data, onNext }: IdentificationStepP
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>First Name</Text>
-        <TextInput
-          style={[styles.input, errors.firstName && styles.inputError]}
-          value={formData.firstName}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, firstName: text }))}
-          placeholder="Enter your first name"
-          autoCapitalize="words"
-        />
-        {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Last Name</Text>
-        <TextInput
-          style={[styles.input, errors.lastName && styles.inputError]}
-          value={formData.lastName}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, lastName: text }))}
-          placeholder="Enter your last name"
-          autoCapitalize="words"
-        />
-        {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Username</Text>
-        <TextInput
-          style={[styles.input, errors.username && styles.inputError]}
-          value={formData.username}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, username: text }))}
-          placeholder="Choose a username"
-          autoCapitalize="none"
-        />
-        {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Date of Birth</Text>
-        <TextInput
-          style={[styles.input, errors.dateOfBirth && styles.inputError]}
-          value={formData.dateOfBirth}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, dateOfBirth: text }))}
-          placeholder="MM/DD/YYYY"
-          keyboardType="numbers-and-punctuation"
-        />
-        {errors.dateOfBirth && <Text style={styles.errorText}>{errors.dateOfBirth}</Text>}
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Phone Number (Optional)</Text>
-        <TextInput
-          style={styles.input}
-          value={formData.phoneNumber}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, phoneNumber: text }))}
-          placeholder="Enter your phone number"
-          keyboardType="phone-pad"
-        />
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>City</Text>
-        <TextInput
-          style={[styles.input, errors.city && styles.inputError]}
-          value={formData.address.city}
-          onChangeText={(text) => setFormData(prev => ({ 
-            ...prev, 
-            address: { ...prev.address, city: text }
-          }))}
-          placeholder="Enter your city"
-        />
-        {errors.city && <Text style={styles.errorText}>{errors.city}</Text>}
-      </View>
-
-      <View style={styles.row}>
-        <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-          <Text style={styles.label}>State</Text>
-          <TextInput
-            style={[styles.input, errors.state && styles.inputError]}
-            value={formData.address.state}
-            onChangeText={(text) => setFormData(prev => ({ 
-              ...prev, 
-              address: { ...prev.address, state: text }
-            }))}
-            placeholder="State"
-          />
-          {errors.state && <Text style={styles.errorText}>{errors.state}</Text>}
-        </View>
-
-        <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-          <Text style={styles.label}>ZIP Code</Text>
-          <TextInput
-            style={[styles.input, errors.zipCode && styles.inputError]}
-            value={formData.address.zipCode}
-            onChangeText={(text) => setFormData(prev => ({ 
-              ...prev, 
-              address: { ...prev.address, zipCode: text }
-            }))}
-            placeholder="ZIP"
-            keyboardType="number-pad"
-          />
-          {errors.zipCode && <Text style={styles.errorText}>{errors.zipCode}</Text>}
-        </View>
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Country</Text>
-        <TextInput
-          style={[styles.input, errors.country && styles.inputError]}
-          value={formData.address.country}
-          onChangeText={(text) => setFormData(prev => ({ 
-            ...prev, 
-            address: { ...prev.address, country: text }
-          }))}
-          placeholder="Enter your country"
-        />
-        {errors.country && <Text style={styles.errorText}>{errors.country}</Text>}
-      </View>
-
-      <Button
-        onPress={handleNext}
-        style={styles.nextButton}
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoid}
       >
-        <Text style={styles.nextButtonText}>Next</Text>
-      </Button>
-    </View>
+        <View style={styles.header}>
+          <Pressable 
+            style={styles.backButton}
+            onPress={onBack}
+          >
+            <ArrowLeft size={24} color="#666" strokeWidth={1.5} />
+          </Pressable>
+        </View>
+
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.titleContainer}>
+            <Text style={styles.title}>Tell us about yourself</Text>
+            <Text style={styles.subtitle}>We need some basic information to get started</Text>
+          </View>
+
+          <View style={styles.form}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>First Name</Text>
+              <TextInput
+                style={[styles.input, errors.firstName && styles.inputError]}
+                value={formData.firstName}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, firstName: text }))}
+                placeholder="Enter your first name"
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+              {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Last Name</Text>
+              <TextInput
+                style={[styles.input, errors.lastName && styles.inputError]}
+                value={formData.lastName}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, lastName: text }))}
+                placeholder="Enter your last name"
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+              {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Username</Text>
+              <TextInput
+                style={[styles.input, errors.username && styles.inputError]}
+                value={formData.username}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, username: text }))}
+                placeholder="Choose a username"
+                autoCapitalize="none"
+                returnKeyType="done"
+              />
+              {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
+            </View>
+          </View>
+
+          <Pressable
+            onPress={handleNext}
+            style={styles.nextButton}
+          >
+            <Text style={styles.nextButtonText}>Next</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
   },
-  inputGroup: {
-    marginBottom: 16,
+  keyboardAvoid: {
+    flex: 1,
   },
-  row: {
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
     flexDirection: 'row',
-    marginBottom: 16,
+    alignItems: 'center',
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 24,
+  },
+  titleContainer: {
+    marginBottom: 32,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: Colors.light.primary,
     marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
     color: '#666',
   },
+  form: {
+    flex: 1,
+    gap: 24,
+  },
+  inputGroup: {
+    gap: 8,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
   input: {
-    height: 48,
+    height: 56,
     borderWidth: 1,
     borderColor: '#e0e0e0',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
     backgroundColor: '#fff',
@@ -233,15 +202,23 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     backgroundColor: Colors.light.primary,
-    height: 48,
-    borderRadius: 24,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
+    marginTop: 32,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
   },
   nextButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
   },
 }); 

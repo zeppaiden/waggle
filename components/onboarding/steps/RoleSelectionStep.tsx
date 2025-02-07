@@ -1,16 +1,18 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, SafeAreaView } from 'react-native';
 import { Text } from '@/components/themed';
 import { UserProfile, UserRole } from '@/types/user';
 import { Colors } from '@/constants/colors-theme';
 import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft } from 'lucide-react-native';
 
 interface RoleSelectionStepProps {
   data: Partial<UserProfile>;
   onNext: (data: Partial<UserProfile>) => void;
+  onBack: () => void;
 }
 
-export default function RoleSelectionStep({ data, onNext }: RoleSelectionStepProps) {
+export default function RoleSelectionStep({ data, onNext, onBack }: RoleSelectionStepProps) {
   const handleRoleSelect = (role: UserRole) => {
     onNext({
       ...data,
@@ -37,46 +39,84 @@ export default function RoleSelectionStep({ data, onNext }: RoleSelectionStepPro
   );
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>How would you like to use Waggle?</Text>
-      <Text style={styles.subtitle}>Choose your primary role</Text>
-
-      <View style={styles.cardsContainer}>
-        <RoleCard
-          role="buyer"
-          title="I want to adopt"
-          description="Browse available pets and find your perfect match"
-          icon="heart-outline"
-        />
-
-        <RoleCard
-          role="owner"
-          title="I have pets to rehome"
-          description="List your pets and find them loving homes"
-          icon="paw-outline"
-        />
-
-        <RoleCard
-          role="both"
-          title="Both"
-          description="I want to both adopt and list pets"
-          icon="sync-outline"
-        />
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Pressable 
+          style={styles.backButton}
+          onPress={onBack}
+        >
+          <ArrowLeft size={24} color="#666" strokeWidth={1.5} />
+        </Pressable>
       </View>
-    </View>
+
+      <View style={styles.content}>
+        <Text style={styles.title}>How would you like to use Waggle?</Text>
+        <Text style={styles.subtitle}>Choose your primary role</Text>
+
+        <View style={styles.cardsContainer}>
+          <RoleCard
+            role="buyer"
+            title="I want to adopt"
+            description="Browse available pets and find your perfect match"
+            icon="heart-outline"
+          />
+
+          <RoleCard
+            role="owner"
+            title="I have pets to rehome"
+            description="List your pets and find them loving homes"
+            icon="paw-outline"
+          />
+
+          <RoleCard
+            role="both"
+            title="Both"
+            description="I want to both adopt and list pets"
+            icon="sync-outline"
+          />
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    backgroundColor: '#fff',
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  content: {
+    flex: 1,
+    padding: 24,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 8,
     textAlign: 'center',
+    color: Colors.light.primary,
   },
   subtitle: {
     fontSize: 16,
@@ -89,29 +129,39 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 16,
+    padding: 24,
     borderWidth: 1,
     borderColor: '#e0e0e0',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: Colors.light.primary + '10',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     marginBottom: 8,
+    color: Colors.light.primary,
   },
   cardDescription: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#666',
     textAlign: 'center',
+    lineHeight: 22,
   },
 }); 
