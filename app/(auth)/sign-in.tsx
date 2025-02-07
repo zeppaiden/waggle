@@ -1,198 +1,251 @@
-import { View, StyleSheet, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
-import { Text, Button, TextInput } from '@/components/themed';
+import { View, StyleSheet, TextInput, Alert } from 'react-native';
+import { Text } from '@/components/themed';
+import { Button } from 'react-native-paper';
 import { useState } from 'react';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/configs/firebase';
 import { Colors } from '@/constants/colors-theme';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { Ionicons } from '@expo/vector-icons';
+import { Pressable } from 'react-native';
 
 export default function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const colorScheme = useColorScheme();
-  const theme = colorScheme ?? 'light';
 
   const handleSignIn = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both email and password');
+      return;
+    }
+
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (err) {
-      setError('Invalid email or password');
+      setError('');
+      setLoading(true);
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+    } catch (err: any) {
+      switch (err.code) {
+        case 'auth/invalid-email':
+          setError('Invalid email address format');
+          break;
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+          setError('Invalid email or password');
+          break;
+        case 'auth/too-many-requests':
+          setError('Too many failed attempts. Please try again later');
+          break;
+        default:
+          setError('Failed to sign in. Please try again');
+          console.error('Sign in error:', err);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <View style={styles.header}>
-        <Ionicons name="paw" size={48} color={Colors[theme].primary} />
+    <View style={styles.container}>
+      <View style={styles.headerContainer}>
+        <Ionicons name="paw" size={48} color={Colors.light.primary} />
         <Text style={styles.title}>Welcome to Waggle</Text>
         <Text style={styles.subtitle}>Find your perfect companion</Text>
       </View>
-      
-      <View style={styles.form}>
-        <View style={styles.inputWrapper}>
-          <View style={styles.inputContainer}>
-            <Ionicons 
-              name="mail-outline" 
-              size={20} 
-              color={Colors[theme].primary} 
-              style={styles.inputIcon}
-            />
-            <TextInput
-              placeholder="Email"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={styles.input}
-            />
-          </View>
+
+      <View style={styles.formContainer}>
+        <View style={[styles.inputContainer, error ? styles.inputError : undefined]}>
+          <Ionicons 
+            name="mail-outline" 
+            size={20} 
+            color={error ? '#ff3b30' : Colors.light.primary} 
+            style={styles.inputIcon}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor={error ? '#ff3b30' : '#999'}
+            value={email}
+            onChangeText={(text) => {
+              setEmail(text);
+              setError('');
+            }}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
         </View>
-        
-        <View style={styles.inputWrapper}>
-          <View style={styles.inputContainer}>
-            <Ionicons 
-              name="lock-closed-outline" 
-              size={20} 
-              color={Colors[theme].primary} 
-              style={styles.inputIcon}
-            />
-            <TextInput
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              style={styles.input}
-            />
-          </View>
+
+        <View style={[styles.inputContainer, error ? styles.inputError : undefined]}>
+          <Ionicons 
+            name="lock-closed-outline" 
+            size={20} 
+            color={error ? '#ff3b30' : Colors.light.primary} 
+            style={styles.inputIcon}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor={error ? '#ff3b30' : '#999'}
+            value={password}
+            onChangeText={(text) => {
+              setPassword(text);
+              setError('');
+            }}
+            secureTextEntry
+          />
         </View>
 
         {error ? (
           <View style={styles.errorContainer}>
-            <Ionicons name="alert-circle" size={16} color="#FF3B30" />
-            <Text style={styles.error}>{error}</Text>
+            <Ionicons name="alert-circle" size={16} color="#ff3b30" />
+            <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
 
-        <View style={styles.buttonContainer}>
-          <Button 
-            onPress={handleSignIn} 
-            style={styles.button}
-          >
-            <Text style={styles.buttonText}>Sign In</Text>
-          </Button>
-        </View>
+        <Button
+          mode="contained"
+          onPress={handleSignIn}
+          loading={loading}
+          style={styles.button}
+          contentStyle={styles.buttonContent}
+          labelStyle={styles.buttonText}
+          disabled={loading || !email.trim() || !password.trim()}
+        >
+          {loading ? 'Signing in...' : 'Sign In'}
+        </Button>
 
-        <View style={styles.linkContainer}>
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Don't have an account? </Text>
           <Link href="/sign-up" asChild>
-            <Pressable 
-              style={({ pressed }) => [
-                styles.link,
-                { opacity: pressed ? 0.7 : 1 }
-              ]}
-            >
-              <Text style={[styles.linkText, { color: Colors[theme].primary }]}>
-                Don't have an account? Sign up
-              </Text>
+            <Pressable>
+              <Text style={styles.footerLink}>Sign up</Text>
             </Pressable>
           </Link>
         </View>
       </View>
-    </KeyboardAvoidingView>
+
+      <View style={styles.pawPrints}>
+        <Ionicons name="paw" size={24} color={Colors.light.primary + '40'} style={styles.paw1} />
+        <Ionicons name="paw" size={20} color={Colors.light.primary + '30'} style={styles.paw2} />
+        <Ionicons name="paw" size={28} color={Colors.light.primary + '20'} style={styles.paw3} />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flex: 1,
-    alignItems: 'center',
+    padding: 32,
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    backgroundColor: Colors.light.background,
+  },
+  headerContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginTop: 16,
     textAlign: 'center',
+    color: Colors.light.text,
+    fontSize: 36,
+    fontWeight: '700',
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 17,
-    color: '#666',
-    marginTop: 8,
+    fontSize: 18,
+    color: Colors.light.secondary,
     textAlign: 'center',
   },
-  form: {
-    flex: 2,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  inputWrapper: {
-    marginBottom: 16,
-    borderRadius: 12,
-    backgroundColor: '#F9F9F9',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
+  formContainer: {
+    width: '100%',
+    marginBottom: 24,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 48,
-    paddingHorizontal: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    borderRadius: 12,
+    backgroundColor: Colors.light.card,
+    paddingHorizontal: 16,
+    height: 56,
   },
   inputIcon: {
-    marginRight: 8,
+    marginRight: 12,
   },
   input: {
     flex: 1,
+    fontSize: 16,
+    color: Colors.light.text,
     height: '100%',
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    padding: 0,
+  },
+  button: {
+    marginTop: 24,
+    backgroundColor: Colors.light.primary,
+    borderRadius: 12,
+    height: 56,
+  },
+  buttonContent: {
+    height: 56,
+  },
+  buttonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.light.card,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 24,
+    gap: 8,
+  },
+  footerText: {
+    color: Colors.light.text,
+    fontSize: 16,
+  },
+  footerLink: {
+    color: Colors.light.primary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  pawPrints: {
+    position: 'absolute',
+    bottom: 40,
+    right: 30,
+    opacity: 0.7,
+  },
+  paw1: {
+    transform: [{ rotate: '-15deg' }],
+  },
+  paw2: {
+    transform: [{ rotate: '10deg' }],
+    marginLeft: 20,
+  },
+  paw3: {
+    transform: [{ rotate: '-5deg' }],
+    marginLeft: -10,
+  },
+  inputError: {
+    borderColor: '#ff3b30',
+  },
+  inputTextError: {
+    color: '#ff3b30',
+  },
+  errorText: {
+    color: '#ff3b30',
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 12,
+    marginLeft: 16,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 12,
-  },
-  error: {
-    color: '#FF3B30',
-    marginLeft: 8,
-    fontSize: 14,
-  },
-  buttonContainer: {
-    marginTop: 8,
-    height: 48,
-  },
-  button: {
-    height: '100%',
-    borderRadius: 12,
-  },
-  buttonText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  linkContainer: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  link: {
-    paddingVertical: 8,
     paddingHorizontal: 16,
-  },
-  linkText: {
-    fontSize: 15,
-    fontWeight: '500',
-    textAlign: 'center',
   },
 }); 

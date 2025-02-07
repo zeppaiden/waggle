@@ -47,23 +47,65 @@ export default function ProfileScreen() {
   }, [user]);
 
   const validateUsername = async (username: string) => {
+    // Basic format validation
     if (!username.trim()) {
       setErrors(prev => ({ ...prev, username: 'Username is required' }));
       return false;
     }
+
+    // Length check (3-20 characters)
+    if (username.length < 3 || username.length > 20) {
+      setErrors(prev => ({ ...prev, username: 'Username must be between 3 and 20 characters' }));
+      return false;
+    }
+
+    // Only allow letters, numbers, underscores, and dots
+    const validUsernameRegex = /^[a-zA-Z0-9._]+$/;
+    if (!validUsernameRegex.test(username)) {
+      setErrors(prev => ({ 
+        ...prev, 
+        username: 'Username can only contain letters, numbers, dots, and underscores' 
+      }));
+      return false;
+    }
+
+    // Must start with a letter
+    if (!/^[a-zA-Z]/.test(username)) {
+      setErrors(prev => ({ 
+        ...prev, 
+        username: 'Username must start with a letter' 
+      }));
+      return false;
+    }
+
+    // No consecutive dots or underscores
+    if (/[._]{2,}/.test(username)) {
+      setErrors(prev => ({ 
+        ...prev, 
+        username: 'Username cannot contain consecutive dots or underscores' 
+      }));
+      return false;
+    }
+
+    // Cannot end with a dot or underscore
+    if (/[._]$/.test(username)) {
+      setErrors(prev => ({ 
+        ...prev, 
+        username: 'Username cannot end with a dot or underscore' 
+      }));
+      return false;
+    }
+
+    // Skip availability check if username hasn't changed
     if (username === profile?.username) {
       setErrors(prev => ({ ...prev, username: undefined }));
       return true;
-    }
-    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-      setErrors(prev => ({ ...prev, username: 'Username must be 3-20 characters and can only contain letters, numbers, and underscores' }));
-      return false;
     }
 
     setIsCheckingUsername(true);
     try {
       const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('username', '==', username));
+      const q = query(usersRef, where('username', '==', username.toLowerCase()));
       const querySnapshot = await getDocs(q);
       
       if (!querySnapshot.empty) {
@@ -80,6 +122,13 @@ export default function ProfileScreen() {
     } finally {
       setIsCheckingUsername(false);
     }
+  };
+
+  const handleUsernameChange = (text: string) => {
+    // Remove spaces and special characters in real-time
+    const sanitizedUsername = text.replace(/[^a-zA-Z0-9._]/g, '').toLowerCase();
+    setEditedProfile(prev => ({ ...prev, username: sanitizedUsername }));
+    debouncedUsernameCheck(sanitizedUsername);
   };
 
   const debouncedUsernameCheck = debounce(validateUsername, 500);
@@ -182,10 +231,7 @@ export default function ProfileScreen() {
       <TextInput
         style={[styles.usernameInput, errors.username && styles.inputError]}
         value={editedProfile.username}
-        onChangeText={(text) => {
-          setEditedProfile(prev => ({ ...prev, username: text }));
-          debouncedUsernameCheck(text);
-        }}
+        onChangeText={handleUsernameChange}
         placeholder="Username"
         placeholderTextColor="#999"
         autoCapitalize="none"

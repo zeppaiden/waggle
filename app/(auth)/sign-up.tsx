@@ -111,7 +111,7 @@ export default function SignUp() {
     <View style={styles.container}>
       <View style={styles.headerContainer}>
         <Text variant="headlineMedium" style={styles.title}>Join Waggle!</Text>
-        <Text style={styles.subtitle}>Where pets become social media stars</Text>
+        <Text style={styles.subtitle}>Where animals meet their forever homes</Text>
       </View>
       
       <View style={styles.formContainer}>

@@ -19,6 +19,7 @@ type Message = {
   timestamp: Date;
   isRead: boolean;
   chatId: string;
+  uniqueChatId: string;
 };
 
 type Chat = {
@@ -42,6 +43,10 @@ export default function ChatScreen() {
   const [pressedChatId, setPressedChatId] = useState<string | null>(null);
   const longPressProgress = useRef(new Animated.Value(0)).current;
 
+  const generateChatId = (userId: string, petId: string) => {
+    return `${userId}_${petId}`;
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -50,11 +55,13 @@ export default function ChatScreen() {
     const messagesQuery = query(
       messagesRef,
       where('participants', 'array-contains', user.uid),
+      where('uniqueChatId', '!=', ''),
+      orderBy('uniqueChatId'),
       orderBy('timestamp', 'desc')
     );
 
     const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      // Group messages by chatId to get latest message for each chat
+      // Group messages by uniqueChatId to get latest message for each chat
       const chatMessages = new Map<string, Message>();
       snapshot.docs.forEach(doc => {
         const message = {
@@ -64,9 +71,9 @@ export default function ChatScreen() {
         } as Message;
 
         // Only keep the latest message for each chat
-        const existingMessage = chatMessages.get(message.chatId);
+        const existingMessage = chatMessages.get(message.uniqueChatId);
         if (!existingMessage || message.timestamp > existingMessage.timestamp) {
-          chatMessages.set(message.chatId, message);
+          chatMessages.set(message.uniqueChatId, message);
         }
       });
 
@@ -100,6 +107,8 @@ export default function ChatScreen() {
   }, [user, pets]);
 
   const handleDeleteChat = async (chatId: string, petName: string) => {
+    if (!user) return;
+
     Alert.alert(
       "Delete Chat",
       `Are you sure you want to delete your chat with ${petName}?`,
@@ -113,20 +122,25 @@ export default function ChatScreen() {
           style: "destructive",
           onPress: async () => {
             try {
+              const uniqueChatId = generateChatId(user.uid, chatId);
               // Send final message
               const finalMessage = {
                 text: "User has left the chat",
-                senderId: user?.uid,
+                senderId: user.uid,
                 timestamp: serverTimestamp(),
                 isRead: false,
                 chatId,
-                participants: [user?.uid || '', 'mock-owner-id'],
+                uniqueChatId,
+                participants: [user.uid, 'mock-owner-id'],
               };
               await addDoc(collection(db, 'messages'), finalMessage);
 
               // Delete all messages for this chat
               const messagesRef = collection(db, 'messages');
-              const q = query(messagesRef, where('chatId', '==', chatId));
+              const q = query(
+                messagesRef, 
+                where('uniqueChatId', '==', uniqueChatId)
+              );
               const snapshot = await getDocs(q);
               
               // Delete each message

@@ -57,7 +57,7 @@ function VideoCard({ videoUrl, shouldPlay = true, isMuted, onToggleMute }: Video
     setHasError(false);
     setIsPaused(false);
     
-    // Attempt to load and play video immediately
+    // Only load video, don't play it yet
     if (videoRef.current) {
       videoRef.current.loadAsync(
         { 
@@ -65,7 +65,7 @@ function VideoCard({ videoUrl, shouldPlay = true, isMuted, onToggleMute }: Video
           overrideFileExtensionAndroid: 'm3u8'
         },
         { 
-          shouldPlay: isFocused && !isPaused,
+          shouldPlay: false,
           isLooping: true,
           isMuted: isMuted
         },
@@ -74,24 +74,23 @@ function VideoCard({ videoUrl, shouldPlay = true, isMuted, onToggleMute }: Video
     }
   }, [videoUrl]);
 
+  // Handle playback state changes
+  useEffect(() => {
+    if (videoRef.current && isVideoLoaded) {
+      if (isFocused && shouldPlay && !isPaused) {
+        videoRef.current.playAsync();
+      } else {
+        videoRef.current.pauseAsync();
+      }
+    }
+  }, [isFocused, isVideoLoaded, shouldPlay, isPaused]);
+
   // Handle mute state changes
   useEffect(() => {
     if (videoRef.current && isVideoLoaded) {
       videoRef.current.setIsMutedAsync(isMuted);
     }
   }, [isMuted]);
-
-  // Handle screen focus/unfocus
-  useEffect(() => {
-    if (videoRef.current && isVideoLoaded) {
-      if (isFocused && !isPaused) {
-        videoRef.current.playAsync();
-        videoRef.current.setIsLoopingAsync(true);
-      } else {
-        videoRef.current.pauseAsync();
-      }
-    }
-  }, [isFocused, isVideoLoaded, isPaused]);
 
   // Cleanup on unmount
   useEffect(() => {

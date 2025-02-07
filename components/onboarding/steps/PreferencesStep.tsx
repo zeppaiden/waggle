@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button } from '@/components/themed';
+import Slider from '@react-native-community/slider';
 import { UserProfile, PetType, SizePreference, ActivityLevel, ExperienceLevel, LivingSpace } from '@/types/user';
 import { Colors } from '@/constants/colors-theme';
 
@@ -18,14 +19,15 @@ const LIVING_SPACES: LivingSpace[] = ['apartment', 'house', 'farm', 'other'];
 
 export default function PreferencesStep({ data, onNext, onBack }: PreferencesStepProps) {
   const [preferences, setPreferences] = useState({
-    petTypes: data.preferences?.petTypes || [],
-    sizePreferences: data.preferences?.sizePreferences || [],
-    activityLevel: data.preferences?.activityLevel || 'any',
-    maxDistance: data.preferences?.maxDistance || 50,
-    experienceLevel: data.preferences?.experienceLevel || 'beginner',
-    livingSpace: data.preferences?.livingSpace || 'apartment',
-    hasChildren: data.preferences?.hasChildren || false,
-    hasOtherPets: data.preferences?.hasOtherPets || false,
+    petTypes: data.buyerPreferences?.petTypes || [],
+    sizePreferences: data.buyerPreferences?.sizePreferences || [],
+    activityLevel: data.buyerPreferences?.activityLevel || 'any',
+    maxDistance: data.buyerPreferences?.maxDistance || 50,
+    experienceLevel: data.buyerPreferences?.experienceLevel || 'beginner',
+    livingSpace: data.buyerPreferences?.livingSpace || 'apartment',
+    hasChildren: data.buyerPreferences?.hasChildren || false,
+    hasOtherPets: data.buyerPreferences?.hasOtherPets || false,
+    ageRange: data.buyerPreferences?.ageRange || { min: 0, max: 20 },
   });
 
   const togglePetType = (type: PetType) => {
@@ -49,7 +51,7 @@ export default function PreferencesStep({ data, onNext, onBack }: PreferencesSte
   const handleNext = () => {
     onNext({
       ...data,
-      preferences: preferences,
+      buyerPreferences: preferences,
     });
   };
 
@@ -68,6 +70,13 @@ export default function PreferencesStep({ data, onNext, onBack }: PreferencesSte
         {label.charAt(0) + label.slice(1).toLowerCase()}
       </Text>
     </Button>
+  );
+
+  const renderSection = (title: string, children: React.ReactNode) => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {children}
+    </View>
   );
 
   return (
@@ -158,6 +167,43 @@ export default function PreferencesStep({ data, onNext, onBack }: PreferencesSte
         </View>
       </View>
 
+      {renderSection('Age Range (years)', (
+        <View style={styles.sliderContainer}>
+          <View style={styles.sliderHeader}>
+            <Text style={styles.sliderValue}>Min: {preferences.ageRange.min}</Text>
+            <Text style={styles.sliderValue}>Max: {preferences.ageRange.max >= 20 ? '20+' : preferences.ageRange.max}</Text>
+          </View>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={20}
+            step={1}
+            value={preferences.ageRange.min}
+            onValueChange={(value: number) => setPreferences(prev => ({
+              ...prev,
+              ageRange: { ...prev.ageRange, min: value }
+            }))}
+            minimumTrackTintColor={Colors.light.primary}
+            maximumTrackTintColor="#e0e0e0"
+            thumbTintColor={Colors.light.primary}
+          />
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={20}
+            step={1}
+            value={preferences.ageRange.max}
+            onValueChange={(value: number) => setPreferences(prev => ({
+              ...prev,
+              ageRange: { ...prev.ageRange, max: value }
+            }))}
+            minimumTrackTintColor={Colors.light.primary}
+            maximumTrackTintColor="#e0e0e0"
+            thumbTintColor={Colors.light.primary}
+          />
+        </View>
+      ))}
+
       <View style={styles.buttonContainer}>
         <Button
           onPress={onBack}
@@ -244,5 +290,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  sliderContainer: {
+    marginBottom: 24,
+  },
+  sliderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  sliderValue: {
+    fontSize: 14,
+    color: '#666',
+  },
+  slider: {
+    height: 40,
+    marginHorizontal: 16,
   },
 }); 

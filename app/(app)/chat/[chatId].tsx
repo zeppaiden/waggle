@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/auth';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
 import { db } from '@/configs/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where } from 'firebase/firestore';
+import { useFavorites } from '@/hooks/useFavorites';
 
 type Message = {
   id: string;
@@ -91,6 +92,8 @@ export default function ChatDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const flatListRef = useRef<FlatList>(null);
   const [isTyping, setIsTyping] = useState(false);
+  const { addFavorite, removeFavorite, isFavorite } = useFavorites(user?.uid || '');
+  const [isFavorited, setIsFavorited] = useState(false);
 
   const chatId = params.chatId as string;
   const pet = pets.find(p => p.id === chatId);
@@ -102,15 +105,21 @@ export default function ChatDetailScreen() {
     }
   };
 
-  // Update the messages effect to scroll when new messages arrive
-  useEffect(() => {
-    if (!chatId) return;
+  // Add this helper function at the component level
+  const generateChatId = (userId: string, petId: string) => {
+    return `${userId}_${petId}`;
+  };
 
-    console.log('[ChatDetail] Setting up messages listener for chat:', chatId);
+  // Update the messages effect to use the unique chat ID
+  useEffect(() => {
+    if (!chatId || !user) return;
+
+    console.log('[ChatDetail] Setting up messages listener');
+    const uniqueChatId = generateChatId(user.uid, chatId);
     const messagesRef = collection(db, 'messages');
     const messagesQuery = query(
       messagesRef,
-      where('chatId', '==', chatId),
+      where('uniqueChatId', '==', uniqueChatId),
       orderBy('timestamp', 'asc')
     );
 
@@ -128,7 +137,6 @@ export default function ChatDetailScreen() {
 
       setMessages(newMessages);
       setIsLoading(false);
-      // Scroll to bottom when new messages arrive
       setTimeout(() => scrollToBottom(), 100);
     }, (error) => {
       console.error('[ChatDetail] Error subscribing to messages:', error);
@@ -139,7 +147,7 @@ export default function ChatDetailScreen() {
       console.log('[ChatDetail] Cleaning up messages listener');
       unsubscribe();
     };
-  }, [chatId]);
+  }, [chatId, user]);
 
   // Add effect to scroll when typing state changes
   useEffect(() => {
@@ -148,16 +156,25 @@ export default function ChatDetailScreen() {
     }
   }, [isTyping]);
 
+  // Add effect to sync favorite state
+  useEffect(() => {
+    if (user && chatId) {
+      setIsFavorited(isFavorite(chatId));
+    }
+  }, [user, chatId, isFavorite]);
+
   const handleSend = async () => {
     if (!newMessage.trim() || !user || !pet) return;
 
     try {
+      const uniqueChatId = generateChatId(user.uid, chatId);
       const messageData = {
         text: newMessage.trim(),
         senderId: user.uid,
         timestamp: serverTimestamp(),
         isRead: false,
         chatId,
+        uniqueChatId,
         participants: [user.uid, 'mock-owner-id'],
       };
 
@@ -179,15 +196,31 @@ export default function ChatDetailScreen() {
             timestamp: serverTimestamp(),
             isRead: false,
             chatId,
+            uniqueChatId,
             participants: [user.uid, 'mock-owner-id'],
           };
           await addDoc(collection(db, 'messages'), responseData);
-        }, 2000); // Show typing for 2 seconds
-      }, 1000); // Wait 1 second before showing typing
+        }, 2000);
+      }, 1000);
 
     } catch (error) {
       console.error('[ChatDetail] Error sending message:', error);
       setIsTyping(false);
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!user || !chatId) return;
+    
+    try {
+      if (isFavorited) {
+        await removeFavorite(chatId);
+      } else {
+        await addFavorite(chatId);
+      }
+      setIsFavorited(!isFavorited);
+    } catch (error) {
+      console.error('[ChatDetail] Error toggling favorite:', error);
     }
   };
 
@@ -241,14 +274,29 @@ export default function ChatDetailScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={Colors[theme].text} />
         </Pressable>
-        <Image 
-          source={{ uri: params.petImage as string }}
-          style={styles.petImage}
-        />
-        <View style={styles.headerText}>
-          <Text style={styles.petName}>{params.petName as string}</Text>
-          <Text style={styles.ownerName}>{params.ownerName as string}</Text>
-        </View>
+        <Pressable 
+          style={styles.headerContent}
+          onPress={() => router.push(`/pet/${chatId}`)}
+        >
+          <Image 
+            source={{ uri: params.petImage as string }}
+            style={styles.petImage}
+          />
+          <View style={styles.headerText}>
+            <Text style={styles.petName}>{params.petName as string}</Text>
+            <Text style={styles.ownerName}>{params.ownerName as string}</Text>
+          </View>
+        </Pressable>
+        <Pressable 
+          style={styles.favoriteButton}
+          onPress={handleToggleFavorite}
+        >
+          <Ionicons 
+            name={isFavorited ? "heart" : "heart-outline"} 
+            size={24} 
+            color={isFavorited ? "#FF2D55" : Colors[theme].text} 
+          />
+        </Pressable>
       </View>
 
       {messages.length === 0 ? (
@@ -333,6 +381,12 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
     marginRight: 12,
+  },
+  headerContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
   },
   petImage: {
     width: 40,
@@ -484,5 +538,9 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#123524',
     marginHorizontal: 1,
+  },
+  favoriteButton: {
+    padding: 8,
+    marginLeft: 8,
   },
 }); 

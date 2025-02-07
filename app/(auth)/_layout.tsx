@@ -29,34 +29,60 @@ export default function AuthLayout() {
     const currentSegment = segments[1] as AuthSegment;
     const inOnboarding = currentSegment === 'onboarding';
     const inTutorial = currentSegment === 'tutorial';
+    const inSignIn = currentSegment === 'sign-in';
 
     console.log('[AuthLayout] Current navigation state:', {
       inAuthGroup,
       currentSegment,
       inOnboarding,
       inTutorial,
+      inSignIn,
     });
 
+    // No user - handle unauthenticated state
     if (!user) {
       if (!inAuthGroup || (inOnboarding && !tempRegistration)) {
         console.log('[AuthLayout] Redirecting to sign in (no user)');
         router.replace('/(auth)/sign-in');
       }
-    } else {
-      if (!isOnboarded) {
-        if (!inOnboarding) {
+      return;
+    }
+
+    // User exists - handle authenticated state
+    if (isOnboarded && hasCompletedTutorial) {
+      if (inAuthGroup) {
+        console.log('[AuthLayout] User is fully onboarded, redirecting to main app');
+        router.replace('/(app)/(tabs)');
+      }
+      return;
+    }
+
+    // Handle tutorial state
+    if (isOnboarded && !hasCompletedTutorial) {
+      if (!inTutorial) {
+        console.log('[AuthLayout] Redirecting to tutorial');
+        router.replace('/(auth)/tutorial');
+      }
+      return;
+    }
+
+    // Handle onboarding state
+    if (!isOnboarded) {
+      // Just signed in - go directly to onboarding
+      if (inSignIn) {
+        console.log('[AuthLayout] User signed in, redirecting to onboarding');
+        router.replace('/(auth)/onboarding');
+        return;
+      }
+
+      // Handle other onboarding cases
+      if (!inOnboarding || (inOnboarding && !tempRegistration)) {
+        if (!tempRegistration) {
+          console.log('[AuthLayout] No temp registration, redirecting to sign up');
+          router.replace('/(auth)/sign-up');
+        } else {
           console.log('[AuthLayout] Redirecting to onboarding');
           router.replace('/(auth)/onboarding');
-        }
-      } else if (!hasCompletedTutorial) {
-        if (!inTutorial) {
-          console.log('[AuthLayout] Redirecting to tutorial');
-          router.replace('/(auth)/tutorial');
-        }
-      } else {
-        if (inAuthGroup) {
-          console.log('[AuthLayout] Redirecting to main app');
-          router.replace('/(app)/(tabs)');
         }
       }
     }
