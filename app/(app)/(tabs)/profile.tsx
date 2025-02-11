@@ -1,4 +1,4 @@
-import { View, StyleSheet, Pressable, ScrollView, Platform, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, Platform, TextInput, Alert, ActivityIndicator, Dimensions } from 'react-native';
 import { Text } from '@/components/themed';
 import { Colors } from '@/constants/colors-theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -7,9 +7,56 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/configs/firebase';
-import { UserProfile } from '@/types/user';
+import { UserProfile, PetType, LivingSpace, SizePreference, ActivityLevel, ExperienceLevel, BuyerPreferences } from '@/types/user';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
 import debounce from 'lodash/debounce';
+import Slider from '@react-native-community/slider';
+import { 
+  Dog, 
+  Cat, 
+  Bird, 
+  Rabbit, 
+  Fish, 
+  PawPrint, 
+  Building2, 
+  Home, 
+  Trees, 
+  MoreHorizontal,
+} from 'lucide-react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const HORIZONTAL_PADDING = 16;
+const CONTENT_PADDING = 16;
+const CHIP_WIDTH = (SCREEN_WIDTH - (HORIZONTAL_PADDING * 2) - (CONTENT_PADDING * 2)) / 2;
+
+type IconComponent = typeof Dog;
+
+interface PetTypeOption {
+  value: PetType;
+  Icon: IconComponent;
+  label: string;
+}
+
+interface LivingSpaceOption {
+  value: LivingSpace;
+  Icon: IconComponent;
+}
+
+const PET_TYPES: PetTypeOption[] = [
+  { value: 'DOG', Icon: Dog, label: 'Dogs' },
+  { value: 'CAT', Icon: Cat, label: 'Cats' },
+  { value: 'BIRD', Icon: Bird, label: 'Birds' },
+  { value: 'RABBIT', Icon: Rabbit, label: 'Rabbits' },
+  { value: 'FISH', Icon: Fish, label: 'Fish' },
+  { value: 'OTHER', Icon: PawPrint, label: 'Other' },
+];
+
+const LIVING_SPACES: LivingSpaceOption[] = [
+  { value: 'apartment', Icon: Building2 },
+  { value: 'house', Icon: Home },
+  { value: 'farm', Icon: Trees },
+  { value: 'other', Icon: MoreHorizontal },
+];
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
@@ -22,6 +69,18 @@ export default function ProfileScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+
+  const defaultBuyerPreferences: BuyerPreferences = {
+    petTypes: [],
+    sizePreferences: ['any'],
+    activityLevel: 'any',
+    maxDistance: 50,
+    experienceLevel: 'beginner',
+    livingSpace: 'apartment',
+    hasChildren: false,
+    hasOtherPets: false,
+    ageRange: { min: 0, max: 20 }
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -262,81 +321,230 @@ export default function ProfileScreen() {
     </View>
   );
 
-  // Add new state for editing preferences
-  const handlePreferenceChange = (
-    field: keyof NonNullable<UserProfile['buyerPreferences']>,
-    value: any
-  ) => {
+  const handlePetTypeChange = (value: PetType) => {
     if (!profile?.buyerPreferences) return;
     
-    setEditedProfile(prev => {
-      const currentPreferences = prev.buyerPreferences || { ...profile.buyerPreferences };
-      return {
-        ...prev,
-        buyerPreferences: {
-          ...currentPreferences,
-          [field]: value
-        } as NonNullable<UserProfile['buyerPreferences']>
-      };
-    });
+    const currentPreferences = editedProfile.buyerPreferences || defaultBuyerPreferences;
+    const currentTypes = currentPreferences.petTypes;
+    const newTypes = currentTypes.includes(value)
+      ? currentTypes.filter(t => t !== value)
+      : [...currentTypes, value];
+    
+    setEditedProfile(prev => ({
+      ...prev,
+      buyerPreferences: {
+        ...currentPreferences,
+        petTypes: newTypes
+      }
+    }));
   };
 
-  const renderEditablePreferenceItem = (
+  const handleLivingSpaceChange = (value: LivingSpace) => {
+    if (!profile?.buyerPreferences) return;
+    
+    const currentPreferences = editedProfile.buyerPreferences || defaultBuyerPreferences;
+    
+    setEditedProfile(prev => ({
+      ...prev,
+      buyerPreferences: {
+        ...currentPreferences,
+        livingSpace: value
+      }
+    }));
+  };
+
+  const handleSizePreferenceChange = (value: SizePreference) => {
+    if (!profile?.buyerPreferences) return;
+    
+    const currentPreferences = editedProfile.buyerPreferences || defaultBuyerPreferences;
+    const currentSizes = currentPreferences.sizePreferences;
+    const newSizes = currentSizes.includes(value)
+      ? currentSizes.filter(s => s !== value)
+      : [...currentSizes, value];
+    
+    setEditedProfile(prev => ({
+      ...prev,
+      buyerPreferences: {
+        ...currentPreferences,
+        sizePreferences: newSizes
+      }
+    }));
+  };
+
+  const handleActivityLevelChange = (value: ActivityLevel) => {
+    if (!profile?.buyerPreferences) return;
+    
+    const currentPreferences = editedProfile.buyerPreferences || defaultBuyerPreferences;
+    
+    setEditedProfile(prev => ({
+      ...prev,
+      buyerPreferences: {
+        ...currentPreferences,
+        activityLevel: value
+      }
+    }));
+  };
+
+  const handleExperienceLevelChange = (value: ExperienceLevel) => {
+    if (!profile?.buyerPreferences) return;
+    
+    const currentPreferences = editedProfile.buyerPreferences || defaultBuyerPreferences;
+    
+    setEditedProfile(prev => ({
+      ...prev,
+      buyerPreferences: {
+        ...currentPreferences,
+        experienceLevel: value
+      }
+    }));
+  };
+
+  const handleBooleanPreferenceChange = (field: 'hasChildren' | 'hasOtherPets', value: boolean) => {
+    if (!profile?.buyerPreferences) return;
+    
+    const currentPreferences = editedProfile.buyerPreferences || defaultBuyerPreferences;
+    
+    setEditedProfile(prev => ({
+      ...prev,
+      buyerPreferences: {
+        ...currentPreferences,
+        [field]: value
+      }
+    }));
+  };
+
+  const handleAgeRangeChange = (field: 'min' | 'max', value: number) => {
+    if (!profile?.buyerPreferences) return;
+    
+    const currentPreferences = editedProfile.buyerPreferences || defaultBuyerPreferences;
+    const currentRange = currentPreferences.ageRange || { min: 0, max: 20 };
+    
+    setEditedProfile(prev => ({
+      ...prev,
+      buyerPreferences: {
+        ...currentPreferences,
+        ageRange: {
+          ...currentRange,
+          [field]: value
+        }
+      }
+    }));
+  };
+
+  const handleDistanceChange = (value: number) => {
+    if (!profile?.buyerPreferences) return;
+    
+    const currentPreferences = editedProfile.buyerPreferences || defaultBuyerPreferences;
+    
+    setEditedProfile(prev => ({
+      ...prev,
+      buyerPreferences: {
+        ...currentPreferences,
+        maxDistance: value
+      }
+    }));
+  };
+
+  const renderIconChip = (
+    value: PetType | LivingSpace,
+    Icon: IconComponent,
     label: string,
-    field: keyof NonNullable<UserProfile['buyerPreferences']>,
+    isPetType: boolean
+  ) => {
+    if (!profile?.buyerPreferences) return null;
+    
+    const isSelected = isPetType
+      ? editedProfile.buyerPreferences?.petTypes?.includes(value as PetType)
+      : editedProfile.buyerPreferences?.livingSpace === value;
+    
+    return (
+      <Pressable
+        key={value}
+        style={[
+          styles.iconChip,
+          isSelected && styles.iconChipSelected
+        ]}
+        onPress={() => {
+          if (isPetType) {
+            handlePetTypeChange(value as PetType);
+          } else {
+            handleLivingSpaceChange(value as LivingSpace);
+          }
+        }}
+      >
+        <View style={[styles.iconContainer, isSelected && styles.iconContainerSelected]}>
+          <Icon 
+            size={28} 
+            color={isSelected ? '#fff' : Colors.light.primary}
+            strokeWidth={1.5}
+          />
+        </View>
+        <Text style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}>
+          {label || value.charAt(0).toUpperCase() + value.slice(1).toLowerCase()}
+        </Text>
+      </Pressable>
+    );
+  };
+
+  const renderChip = (
+    label: string,
+    field: keyof BuyerPreferences,
     options: string[],
-    currentValue: string | string[]
+    currentValue: string | string[] | boolean
   ) => {
     if (!profile?.buyerPreferences) return null;
     
     const editedValue = editedProfile.buyerPreferences?.[field] ?? currentValue;
     
     return (
-      <View style={styles.preferenceItem}>
-        <Text style={styles.preferenceLabel}>{label}</Text>
-        {isEditing ? (
-          <View style={styles.preferenceOptions}>
-            {options.map((option) => (
-              <Pressable
-                key={option}
-                style={[
-                  styles.preferenceOption,
-                  Array.isArray(editedValue) 
-                    ? editedValue.includes(option) && styles.preferenceOptionSelected
-                    : editedValue === option && styles.preferenceOptionSelected
-                ]}
-                onPress={() => {
-                  if (Array.isArray(editedValue)) {
-                    // Handle multi-select for size preferences
-                    const newValue = editedValue.includes(option)
-                      ? editedValue.filter(v => v !== option)
-                      : [...editedValue, option];
-                    handlePreferenceChange(field, newValue);
-                  } else {
-                    // Handle single select for other preferences
-                    handlePreferenceChange(field, option);
-                  }
-                }}
-              >
-                <Text style={[
-                  styles.preferenceOptionText,
-                  Array.isArray(editedValue)
-                    ? editedValue.includes(option) && styles.preferenceOptionTextSelected
-                    : editedValue === option && styles.preferenceOptionTextSelected
-                ]}>
-                  {option}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.preferenceValue}>
-            {Array.isArray(currentValue) ? currentValue.join(', ') : currentValue}
-          </Text>
-        )}
+      <View style={styles.chipGroup}>
+        {options.map((option) => {
+          const isSelected = Array.isArray(editedValue)
+            ? editedValue.includes(option)
+            : editedValue === option;
+            
+          return (
+            <Pressable
+              key={option}
+              style={[
+                styles.chip,
+                isSelected && styles.chipSelected
+              ]}
+              onPress={() => {
+                if (field === 'sizePreferences') {
+                  handleSizePreferenceChange(option as SizePreference);
+                } else if (field === 'activityLevel') {
+                  handleActivityLevelChange(option as ActivityLevel);
+                } else if (field === 'experienceLevel') {
+                  handleExperienceLevelChange(option as ExperienceLevel);
+                } else if (field === 'hasChildren' || field === 'hasOtherPets') {
+                  handleBooleanPreferenceChange(field, option === 'Yes');
+                }
+              }}
+            >
+              <Text style={[
+                styles.chipText,
+                isSelected && styles.chipTextSelected
+              ]}>
+                {option.charAt(0).toUpperCase() + option.slice(1).toLowerCase()}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     );
   };
+
+  // Add new preference options
+  const AGE_RANGE_OPTIONS = {
+    min: 0,
+    max: 20,
+    step: 1
+  };
+
+  // Add helper function for boolean display
+  const getBooleanDisplayValue = (value: boolean | undefined) => value ? 'Yes' : 'No';
+  const getBooleanFromDisplay = (display: string) => display === 'Yes';
 
   if (loading) {
     return (
@@ -450,42 +658,150 @@ export default function ProfileScreen() {
           <View style={styles.preferencesSection}>
             <Text style={styles.sectionTitle}>Preferences</Text>
             <View style={styles.preferencesGrid}>
-              {renderEditablePreferenceItem(
-                'Size',
-                'sizePreferences',
-                ['small', 'medium', 'large', 'any'],
-                profile.buyerPreferences.sizePreferences
-              )}
-              {renderEditablePreferenceItem(
-                'Activity',
-                'activityLevel',
-                ['low', 'moderate', 'high', 'any'],
-                profile.buyerPreferences.activityLevel
-              )}
-              {renderEditablePreferenceItem(
-                'Experience',
-                'experienceLevel',
-                ['beginner', 'intermediate', 'expert'],
-                profile.buyerPreferences.experienceLevel
-              )}
-              {isEditing ? (
-                <View style={styles.preferenceItem}>
-                  <Text style={styles.preferenceLabel}>Distance (miles)</Text>
-                  <TextInput
-                    style={styles.preferenceInput}
-                    value={String(editedProfile.buyerPreferences?.maxDistance || profile.buyerPreferences.maxDistance)}
-                    onChangeText={(text) => {
-                      const value = parseInt(text) || 0;
-                      handlePreferenceChange('maxDistance', value);
-                    }}
-                    keyboardType="number-pad"
-                    placeholder="Enter max distance"
-                    placeholderTextColor="#999"
-                  />
+              <View style={styles.preferenceItem}>
+                <Text style={styles.preferenceLabel}>Pet Types</Text>
+                <View style={styles.iconChipGrid}>
+                  {PET_TYPES.map(({ value, Icon, label }) => 
+                    isEditing && renderIconChip(value, Icon, label, true)
+                  )}
+                  {!isEditing && (
+                    <Text style={styles.preferenceValue}>
+                      {profile.buyerPreferences?.petTypes.join(', ')}
+                    </Text>
+                  )}
                 </View>
-              ) : (
-                renderPreferenceItem('Distance', `${profile.buyerPreferences.maxDistance} miles`)
-              )}
+              </View>
+
+              <View style={styles.preferenceItem}>
+                <Text style={styles.preferenceLabel}>Living Space</Text>
+                <View style={styles.iconChipGrid}>
+                  {LIVING_SPACES.map(({ value, Icon }) => 
+                    isEditing && renderIconChip(value, Icon, '', false)
+                  )}
+                  {!isEditing && (
+                    <Text style={styles.preferenceValue}>
+                      {profile.buyerPreferences?.livingSpace}
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.preferenceItem}>
+                <Text style={styles.preferenceLabel}>Size</Text>
+                {isEditing ? (
+                  renderChip('Size', 'sizePreferences', ['small', 'medium', 'large', 'any'], profile.buyerPreferences?.sizePreferences || [])
+                ) : (
+                  <Text style={styles.preferenceValue}>
+                    {profile.buyerPreferences?.sizePreferences.join(', ')}
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.preferenceItem}>
+                <Text style={styles.preferenceLabel}>Activity</Text>
+                {isEditing ? (
+                  renderChip('Activity', 'activityLevel', ['low', 'moderate', 'high', 'any'], profile.buyerPreferences?.activityLevel || 'any')
+                ) : (
+                  <Text style={styles.preferenceValue}>
+                    {profile.buyerPreferences?.activityLevel}
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.preferenceItem}>
+                <Text style={styles.preferenceLabel}>Experience</Text>
+                {isEditing ? (
+                  renderChip('Experience', 'experienceLevel', ['beginner', 'intermediate', 'expert'], profile.buyerPreferences?.experienceLevel || 'beginner')
+                ) : (
+                  <Text style={styles.preferenceValue}>
+                    {profile.buyerPreferences?.experienceLevel}
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.preferenceItem}>
+                <Text style={styles.preferenceLabel}>Distance</Text>
+                {isEditing ? (
+                  <View style={styles.preferenceItem}>
+                    <Text style={styles.preferenceLabel}>Distance (miles)</Text>
+                    <TextInput
+                      style={styles.preferenceInput}
+                      value={String(editedProfile.buyerPreferences?.maxDistance ?? profile.buyerPreferences?.maxDistance ?? 50)}
+                      onChangeText={(text) => {
+                        const value = parseInt(text) || 0;
+                        handleDistanceChange(value);
+                      }}
+                      keyboardType="number-pad"
+                      placeholder="Enter max distance"
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                ) : (
+                  <Text style={styles.preferenceValue}>
+                    {profile.buyerPreferences?.maxDistance || 50} miles
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.preferenceItem}>
+                <Text style={styles.preferenceLabel}>Age Range</Text>
+                {isEditing ? (
+                  <View style={styles.preferenceItem}>
+                    <Text style={styles.preferenceLabel}>Age Range (years)</Text>
+                    <View style={styles.sliderContainer}>
+                      <View style={styles.sliderHeader}>
+                        <Text style={styles.sliderValue}>Min: {editedProfile.buyerPreferences?.ageRange?.min ?? profile.buyerPreferences?.ageRange?.min ?? 0}</Text>
+                        <Text style={styles.sliderValue}>Max: {editedProfile.buyerPreferences?.ageRange?.max ?? profile.buyerPreferences?.ageRange?.max ?? AGE_RANGE_OPTIONS.max}</Text>
+                      </View>
+                      <Slider
+                        style={styles.slider}
+                        minimumValue={0}
+                        maximumValue={20}
+                        step={1}
+                        value={editedProfile.buyerPreferences?.ageRange?.min ?? profile.buyerPreferences?.ageRange?.min ?? 0}
+                        onValueChange={(value) => handleAgeRangeChange('min', value)}
+                        minimumTrackTintColor={Colors.light.primary}
+                        maximumTrackTintColor="#e0e0e0"
+                        thumbTintColor={Colors.light.primary}
+                      />
+                      <Slider
+                        style={styles.slider}
+                        minimumValue={0}
+                        maximumValue={20}
+                        step={1}
+                        value={editedProfile.buyerPreferences?.ageRange?.max ?? profile.buyerPreferences?.ageRange?.max ?? AGE_RANGE_OPTIONS.max}
+                        onValueChange={(value) => handleAgeRangeChange('max', value)}
+                        minimumTrackTintColor={Colors.light.primary}
+                        maximumTrackTintColor="#e0e0e0"
+                        thumbTintColor={Colors.light.primary}
+                      />
+                    </View>
+                  </View>
+                ) : (
+                  <Text style={styles.preferenceValue}>
+                    {profile.buyerPreferences?.ageRange?.min ?? 0} - {profile.buyerPreferences?.ageRange?.max ?? AGE_RANGE_OPTIONS.max} years
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.preferenceItem}>
+                <Text style={styles.preferenceLabel}>Additional Information</Text>
+                {isEditing ? (
+                  <View style={styles.chipGroup}>
+                    {renderChip('Children', 'hasChildren', ['Yes', 'No'], getBooleanDisplayValue(profile.buyerPreferences?.hasChildren))}
+                    {renderChip('Other Pets', 'hasOtherPets', ['Yes', 'No'], getBooleanDisplayValue(profile.buyerPreferences?.hasOtherPets))}
+                  </View>
+                ) : (
+                  <View>
+                    <Text style={styles.preferenceValue}>
+                      Children: {getBooleanDisplayValue(profile.buyerPreferences?.hasChildren)}
+                    </Text>
+                    <Text style={styles.preferenceValue}>
+                      Other Pets: {getBooleanDisplayValue(profile.buyerPreferences?.hasOtherPets)}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
           </View>
         )}
@@ -723,32 +1039,119 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  preferenceOptions: {
+  iconChipGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
+    paddingTop: 8,
+    gap: 12,
+    paddingHorizontal: 2,
   },
-  preferenceOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+  iconChip: {
+    width: 140,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  iconChipSelected: {
+    borderColor: Colors.light.primary,
+    backgroundColor: Colors.light.primary + '08',
+    shadowColor: Colors.light.primary,
+    shadowOpacity: 0.12,
+  },
+  iconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.light.primary + '08',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  iconContainerSelected: {
+    backgroundColor: Colors.light.primary,
+  },
+  chipLabel: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  chipLabelSelected: {
+    color: Colors.light.primary,
+    fontWeight: '600',
+  },
+  chipGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  chip: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 16,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  preferenceOptionSelected: {
-    backgroundColor: Colors.light.primary + '10',
+  chipSelected: {
+    backgroundColor: Colors.light.primary + '08',
     borderColor: Colors.light.primary,
   },
-  preferenceOptionText: {
-    fontSize: 14,
+  chipText: {
+    fontSize: 15,
     color: '#666',
     fontWeight: '500',
   },
-  preferenceOptionTextSelected: {
+  chipTextSelected: {
     color: Colors.light.primary,
     fontWeight: '600',
+  },
+  sliderContainer: {
+    marginTop: 16,
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  sliderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sliderValue: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '500',
+  },
+  slider: {
+    width: '100%',
+    height: 40,
   },
   preferenceInput: {
     fontSize: 16,

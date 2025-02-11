@@ -5,7 +5,7 @@ import { Colors } from '@/constants/colors-theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMemo } from 'react';
 import { PetProfile } from '@/components/pet-profile/PetProfile';
-import { usePets } from '@/hooks/usePets';
+import { useMatchedPets } from '@/hooks/useMatchedPets';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { 
   useSharedValue, 
@@ -21,7 +21,7 @@ export default function PetProfileScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const theme = colorScheme ?? 'light';
-  const { pets, loading, error } = usePets();
+  const { pets, loading, error } = useMatchedPets();
 
   const containerStyle = useMemo(() => [
     styles.container,

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TextInput, ScrollView, Pressable, Image } from 'react-native';
+import { View, StyleSheet, TextInput, ScrollView, Pressable, Image, ActivityIndicator } from 'react-native';
 import { Text, Button } from '@/components/themed';
 import { UserProfile, PetType } from '@/types/user';
 import { Colors } from '@/constants/colors-theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { storage } from '@/configs/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface OwnerProfileStepProps {
   data: Partial<UserProfile>;
@@ -20,7 +22,7 @@ export default function OwnerProfileStep({ data, onNext, onBack }: OwnerProfileS
     type: '' as PetType,
     breed: '',
     age: '',
-    photos: [] as string[],
+    photos: [] as { uri: string; fileName: string }[],
     description: '',
   });
 
@@ -31,6 +33,7 @@ export default function OwnerProfileStep({ data, onNext, onBack }: OwnerProfileS
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isUploading, setIsUploading] = useState(false);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -41,11 +44,35 @@ export default function OwnerProfileStep({ data, onNext, onBack }: OwnerProfileS
     });
 
     if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      const fileName = uri.split('/').pop() || Date.now().toString();
       setPetData(prev => ({
         ...prev,
-        photos: [...prev.photos, result.assets[0].uri],
+        photos: [...prev.photos, { uri, fileName }],
       }));
     }
+  };
+
+  const uploadPhotos = async (petId: string) => {
+    const uploadPromises = petData.photos.map(async (photo) => {
+      try {
+        // Convert URI to blob
+        const response = await fetch(photo.uri);
+        const blob = await response.blob();
+
+        // Upload to Firebase Storage
+        const photoRef = ref(storage, `pets/${petId}/photos/${photo.fileName}`);
+        await uploadBytes(photoRef, blob);
+
+        // Get download URL
+        return await getDownloadURL(photoRef);
+      } catch (error) {
+        console.error('Error uploading photo:', error);
+        throw error;
+      }
+    });
+
+    return Promise.all(uploadPromises);
   };
 
   const validate = () => {
@@ -71,26 +98,37 @@ export default function OwnerProfileStep({ data, onNext, onBack }: OwnerProfileS
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (validate()) {
-      onNext({
-        ...data,
-        ownerProfile: {
-          ...contactData,
-          availablePets: [{
-            id: Date.now().toString(), // Temporary ID
-            name: petData.name,
-            type: petData.type,
-            breed: petData.breed,
-            age: parseInt(petData.age, 10),
-            photos: petData.photos,
-            description: petData.description,
-            status: 'available',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }],
-        },
-      });
+      try {
+        setIsUploading(true);
+        const petId = Date.now().toString(); // Temporary ID
+        const photoUrls = await uploadPhotos(petId);
+
+        onNext({
+          ...data,
+          ownerProfile: {
+            ...contactData,
+            availablePets: [{
+              id: petId,
+              name: petData.name,
+              type: petData.type,
+              breed: petData.breed,
+              age: parseInt(petData.age, 10),
+              photos: photoUrls,
+              description: petData.description,
+              status: 'available',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }],
+          },
+        });
+      } catch (error) {
+        console.error('Error uploading photos:', error);
+        setErrors({ photos: 'Failed to upload photos. Please try again.' });
+      } finally {
+        setIsUploading(false);
+      }
     }
   };
 
@@ -161,7 +199,7 @@ export default function OwnerProfileStep({ data, onNext, onBack }: OwnerProfileS
           <View style={styles.photoGrid}>
             {petData.photos.map((photo, index) => (
               <View key={index} style={styles.photoContainer}>
-                <Image source={{ uri: photo }} style={styles.photo} />
+                <Image source={{ uri: photo.uri }} style={styles.photo} />
                 <Pressable
                   style={styles.removePhoto}
                   onPress={() => setPetData(prev => ({
@@ -173,8 +211,19 @@ export default function OwnerProfileStep({ data, onNext, onBack }: OwnerProfileS
                 </Pressable>
               </View>
             ))}
-            <Pressable style={styles.addPhoto} onPress={pickImage}>
-              <Ionicons name="add" size={32} color="#666" />
+            <Pressable 
+              style={[
+                styles.addPhoto,
+                isUploading && styles.addPhotoDisabled
+              ]} 
+              onPress={pickImage}
+              disabled={isUploading}
+            >
+              {isUploading ? (
+                <ActivityIndicator color="#666" />
+              ) : (
+                <Ionicons name="add" size={32} color="#666" />
+              )}
             </Pressable>
           </View>
           {errors.photos && <Text style={styles.errorText}>{errors.photos}</Text>}
@@ -377,5 +426,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  addPhotoDisabled: {
+    opacity: 0.5,
   },
 }); 

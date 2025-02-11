@@ -5,8 +5,12 @@ rules_version = '2';
 //    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if false;
+    match /pets/{petId}/photos/{photo} {
+      // Allow read access to all pet photos
+      allow read: if true;
+      // Allow write access only to authenticated users who own the pet
+      allow write: if request.auth != null && 
+        exists(/databases/(default)/documents/users/$(request.auth.uid)/ownerProfile/availablePets/$(petId));
     }
   }
 }

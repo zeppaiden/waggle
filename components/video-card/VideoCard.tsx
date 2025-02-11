@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect } from 'react';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Stack, YStack, Text } from 'tamagui';
+import { Stack, YStack, Text, View } from 'tamagui';
 import { VideoItem } from '../../types/pets';
+import { StyleSheet } from 'react-native';
 
 interface VideoCardProps {
   video: VideoItem;
@@ -87,12 +88,45 @@ export function VideoCard({ video, onLoadingChange }: VideoCardProps) {
             <Text color="white" fontSize={16} mb="$2">
               {video.distance} away
             </Text>
-            <Text color="white" fontSize={16}>
-              Match Score: {video.score}
-            </Text>
+            <View style={styles.matchScoreContainer}>
+              <View style={[
+                styles.matchScoreBadge,
+                { backgroundColor: getMatchScoreColor(video.score) }
+              ]}>
+                <Text style={styles.matchScoreText}>
+                  {Math.round(video.score * 10)}% Match
+                </Text>
+              </View>
+            </View>
           </YStack>
         </>
       )}
     </Stack>
   );
-} 
+}
+
+function getMatchScoreColor(score: number): string {
+  if (score >= 9) return '#34C759'; // Excellent match (green)
+  if (score >= 7) return '#5856D6'; // Good match (purple)
+  if (score >= 5) return '#FF9500'; // Moderate match (orange)
+  return '#FF3B30'; // Poor match (red)
+}
+
+const styles = StyleSheet.create({
+  matchScoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  matchScoreBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#34C759',
+  },
+  matchScoreText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+}); 

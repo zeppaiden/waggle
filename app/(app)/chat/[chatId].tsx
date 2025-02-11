@@ -12,6 +12,7 @@ import { PulsingPaw } from '@/components/ui/PulsingPaw';
 import { db } from '@/configs/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where } from 'firebase/firestore';
 import { useFavorites } from '@/hooks/useFavorites';
+import { generateAIResponse } from '@/services/openai';
 
 type Message = {
   id: string;
@@ -94,6 +95,7 @@ export default function ChatDetailScreen() {
   const [isTyping, setIsTyping] = useState(false);
   const { addFavorite, removeFavorite, isFavorite } = useFavorites(user?.uid || '');
   const [isFavorited, setIsFavorited] = useState(false);
+  const [messageHistory, setMessageHistory] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
 
   const chatId = params.chatId as string;
   const pet = pets.find(p => p.id === chatId);
@@ -110,7 +112,7 @@ export default function ChatDetailScreen() {
     return `${userId}_${petId}`;
   };
 
-  // Update the messages effect to use the unique chat ID
+  // Update the messages effect to maintain message history
   useEffect(() => {
     if (!chatId || !user) return;
 
@@ -136,6 +138,14 @@ export default function ChatDetailScreen() {
       });
 
       setMessages(newMessages);
+      
+      // Update message history for AI context
+      const history = newMessages.map(msg => ({
+        role: msg.senderId === user.uid ? 'user' as const : 'assistant' as const,
+        content: msg.text
+      }));
+      setMessageHistory(history);
+      
       setIsLoading(false);
       setTimeout(() => scrollToBottom(), 100);
     }, (error) => {
@@ -183,25 +193,45 @@ export default function ChatDetailScreen() {
       setNewMessage('');
       scrollToBottom();
 
-      // Show typing indicator after a delay
-      setTimeout(() => {
-        setIsTyping(true);
+      // Show typing indicator
+      setIsTyping(true);
+      
+      try {
+        // Generate AI response
+        const aiResponse = await generateAIResponse(
+          pet,
+          messageHistory,
+          newMessage.trim()
+        );
+
+        // Send AI response
+        const responseData = {
+          text: aiResponse,
+          senderId: 'mock-owner-id',
+          timestamp: serverTimestamp(),
+          isRead: false,
+          chatId,
+          uniqueChatId,
+          participants: [user.uid, 'mock-owner-id'],
+        };
         
-        // Send automated response after typing
-        setTimeout(async () => {
-          setIsTyping(false);
-          const responseData = {
-            text: `Thank you for your message about ${pet.name}! I'm ${pet.owner.name}, ${pet.name}'s current owner. I'll be happy to tell you more about them. ${pet.name} is a wonderful ${pet.breed} who loves ${pet.interests[0]} and ${pet.interests[1]}. Would you like to schedule a meet and greet?`,
-            senderId: 'mock-owner-id',
-            timestamp: serverTimestamp(),
-            isRead: false,
-            chatId,
-            uniqueChatId,
-            participants: [user.uid, 'mock-owner-id'],
-          };
-          await addDoc(collection(db, 'messages'), responseData);
-        }, 2000);
-      }, 1000);
+        await addDoc(collection(db, 'messages'), responseData);
+      } catch (error) {
+        console.error('[ChatDetail] Error generating AI response:', error);
+        // Send fallback message if AI fails
+        const fallbackData = {
+          text: `I apologize, but I'm having trouble responding right now. Please try again in a moment.`,
+          senderId: 'mock-owner-id',
+          timestamp: serverTimestamp(),
+          isRead: false,
+          chatId,
+          uniqueChatId,
+          participants: [user.uid, 'mock-owner-id'],
+        };
+        await addDoc(collection(db, 'messages'), fallbackData);
+      } finally {
+        setIsTyping(false);
+      }
 
     } catch (error) {
       console.error('[ChatDetail] Error sending message:', error);

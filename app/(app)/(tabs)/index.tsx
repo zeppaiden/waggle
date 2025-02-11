@@ -11,6 +11,8 @@ import Animated, {
   withTiming,
   withSequence,
   withDelay,
+  withRepeat,
+  Easing,
 } from 'react-native-reanimated';
 import {
   Gesture,
@@ -20,12 +22,13 @@ import {
 import { Colors } from '@/constants/colors-theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useRouter } from 'expo-router';
-import { usePets } from '@/hooks/usePets';
+import { useMatchedPets } from '@/hooks/useMatchedPets';
 import { Ionicons } from '@expo/vector-icons';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useIsFocused } from '@react-navigation/native';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
 import { useAuth } from '@/contexts/auth';
+import { Pet } from '@/types/pet';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.5;
@@ -172,13 +175,158 @@ function VideoCard({ videoUrl, shouldPlay = true, isMuted, onToggleMute }: Video
   );
 }
 
+function FloatingHeart({ delay, style }: { delay: number; style?: any }) {
+  const translateY = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(0); // Start invisible
+
+  useEffect(() => {
+    // Initial fade in
+    opacity.value = withDelay(
+      delay,
+      withTiming(1, { 
+        duration: 1000,
+        easing: Easing.inOut(Easing.ease)
+      })
+    );
+
+    // Start floating animation
+    translateY.value = withDelay(
+      delay,
+      withRepeat(
+        withSequence(
+          withTiming(-60, { 
+            duration: 3000, 
+            easing: Easing.inOut(Easing.ease) 
+          }),
+          withTiming(0, { duration: 0 })
+        ),
+        -1
+      )
+    );
+
+    // Continuous fade in/out
+    opacity.value = withDelay(
+      delay,
+      withRepeat(
+        withSequence(
+          withTiming(1, { 
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease)
+          }),
+          withTiming(0, { 
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease)
+          })
+        ),
+        -1,
+        true // Reverse animation for smoother transition
+      )
+    );
+
+    scale.value = withDelay(
+      delay,
+      withRepeat(
+        withSequence(
+          withTiming(1.1, { 
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease)
+          }),
+          withTiming(0.9, { 
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease)
+          })
+        ),
+        -1,
+        true // Reverse animation for smoother transition
+      )
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: translateY.value },
+      { scale: scale.value }
+    ],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View style={[animatedStyle, style]}>
+      <Ionicons name="heart" size={20} color="#FF2D55" />
+    </Animated.View>
+  );
+}
+
+function ValentineOverlay() {
+  const positions = useMemo(() => [
+    { bottom: 140, left: 20 },
+    { bottom: 180, left: 40 },
+    { bottom: 160, left: 80 },
+    { bottom: 200, right: 40 },
+    { bottom: 150, right: 80 },
+  ], []);
+
+  return (
+    <View style={styles.valentineOverlay}>
+      {positions.map((pos, index) => (
+        <FloatingHeart 
+          key={index} 
+          delay={index * 400} 
+          style={{ position: 'absolute', ...pos }}
+        />
+      ))}
+    </View>
+  );
+}
+
 function PetCard({ pet, style, isNext = false }: PetCardProps) {
   const router = useRouter();
   const [isMuted, setIsMuted] = useState(true);
+  const badgeScale = useSharedValue(1);
+  const isValentineMatch = useMemo(() => {
+    // Valentine's match criteria:
+    // 1. Young or senior pets for special Valentine's promotion
+    // 2. Must have loving personality traits
+    // 3. Must be close by (within 5km)
+    const isYoungOrSenior = pet.age <= 3 || pet.age >= 8;
+    const hasLovingPersonality = pet.interests.some((interest: string) => 
+      ['Cuddling', 'Affectionate', 'Gentle', 'Friendly', 'Social'].includes(interest)
+    );
+    const isNearby = parseFloat(pet.location.split(' ')[0]) <= 5;
+    
+    return isYoungOrSenior && hasLovingPersonality && isNearby;
+  }, [pet.age, pet.interests, pet.location]);
+
+  useEffect(() => {
+    if (isValentineMatch) {
+      // Create a gentler pulsing animation
+      badgeScale.value = withRepeat(
+        withSequence(
+          withTiming(1.05, { 
+            duration: 1000,
+            easing: Easing.inOut(Easing.sin)
+          }),
+          withTiming(1, { 
+            duration: 1000,
+            easing: Easing.inOut(Easing.sin)
+          })
+        ),
+        -1, // Infinite repetitions
+        true // Reverse the sequence for smoother transitions
+      );
+    }
+  }, [isValentineMatch]);
+
+  const badgeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: badgeScale.value }],
+  }));
+
   const viewStyle = useMemo(() => [
     styles.card,
-    style
-  ], [style]);
+    style,
+    isValentineMatch && styles.valentineCard
+  ], [style, isValentineMatch]);
 
   const toggleMute = useCallback(() => {
     setIsMuted(prev => !prev);
@@ -192,28 +340,38 @@ function PetCard({ pet, style, isNext = false }: PetCardProps) {
         isMuted={isMuted}
         onToggleMute={toggleMute}
       />
+      {isValentineMatch && <ValentineOverlay />}
       <View style={styles.controlButtons}>
         <Pressable 
-          style={styles.infoButton}
+          style={[styles.controlButton, isValentineMatch && styles.valentineControlButton]}
           onPress={() => router.push(`/pet/${pet.id}`)}
         >
-          <Ionicons name="information-circle" size={32} color="#123524" />
+          <Ionicons 
+            name="information-circle" 
+            size={24} 
+            color={isValentineMatch ? "#FF2D55" : "#123524"} 
+          />
         </Pressable>
         <Pressable 
-          style={styles.muteButton}
+          style={[styles.controlButton, isValentineMatch && styles.valentineControlButton]}
           onPress={toggleMute}
         >
           <Ionicons 
             name={isMuted ? "volume-mute" : "volume-medium"} 
             size={24} 
-            color="#123524" 
+            color={isValentineMatch ? "#FF2D55" : "#123524"}
           />
         </Pressable>
       </View>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, isValentineMatch && styles.valentineTextOverlay]}>
         <Text style={styles.name}>{pet.name}, {pet.age}</Text>
         <Text style={styles.location}>{pet.location}</Text>
-        <Text style={styles.matchScore}>Match Score: {pet.matchScore}</Text>
+        {isValentineMatch && (
+          <Animated.View style={[styles.valentineBadge, badgeAnimatedStyle]}>
+            <Ionicons name="heart" size={16} color="#fff" />
+            <Text style={styles.valentineBadgeText}>Valentine's Match!</Text>
+          </Animated.View>
+        )}
       </View>
     </Animated.View>
   );
@@ -221,17 +379,46 @@ function PetCard({ pet, style, isNext = false }: PetCardProps) {
 
 export default function DiscoverScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [cachedPets, setCachedPets] = useState<Pet[]>([]);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
   const colorScheme = useColorScheme();
   const theme = colorScheme ?? 'light';
   const router = useRouter();
-  const { pets, loading, error } = usePets();
+  const { pets, loading, error, refresh } = useMatchedPets();
   const { user } = useAuth();
   const { addFavorite, isFavorite } = useFavorites(user?.uid || '');
+  const isFocused = useIsFocused();
 
   const x = useSharedValue(0);
   const y = useSharedValue(0);
   const rotation = useSharedValue(0);
   const scale = useSharedValue(0.9);
+
+  // Cache management
+  useEffect(() => {
+    if (pets.length > 0) {
+      setCachedPets(pets);
+      setLastRefreshTime(Date.now());
+    }
+  }, [pets]);
+
+  // Refresh management with cache
+  useEffect(() => {
+    if (isFocused) {
+      const now = Date.now();
+      const shouldRefresh = now - lastRefreshTime > CACHE_DURATION;
+      
+      if (shouldRefresh || cachedPets.length === 0) {
+        refresh();
+      }
+    }
+  }, [isFocused, lastRefreshTime, refresh]);
+
+  // Use cached pets if available, otherwise use fetched pets
+  const displayPets = cachedPets.length > 0 ? cachedPets : pets;
+  const currentPet = displayPets[currentIndex];
+  const nextPet = displayPets[(currentIndex + 1) % displayPets.length];
 
   const handleSwipeLeft = useCallback(() => {
     // Reduce stiffness from 200 to 100 for smoother animation
@@ -342,9 +529,6 @@ export default function DiscoverScreen() {
     ],
   }));
 
-  const currentPet = pets[currentIndex];
-  const nextPet = pets[(currentIndex + 1) % pets.length];
-
   const containerStyle = useMemo(() => [
     styles.container,
     { backgroundColor: Colors[theme].background }
@@ -353,7 +537,7 @@ export default function DiscoverScreen() {
   if (loading) {
     return (
       <View style={[containerStyle, styles.centerContent]}>
-        <ActivityIndicator size="large" color={Colors[theme].text} />
+        <PulsingPaw size={64} color={Colors[theme].text} backgroundColor="transparent" />
       </View>
     );
   }
@@ -540,24 +724,29 @@ const styles = StyleSheet.create({
     top: 16,
     right: 16,
     alignItems: 'center',
-    zIndex: 2,
+    zIndex: 3,
     gap: 8,
   },
-  infoButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  controlButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  muteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  valentineControlButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderWidth: 1,
+    borderColor: '#FF2D55',
   },
   centerContent: {
     justifyContent: 'center',
@@ -580,5 +769,54 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  valentineCard: {
+    borderWidth: 2,
+    borderColor: '#FF2D55',
+    shadowColor: '#FF2D55',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  valentineOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
+    pointerEvents: 'none',
+  },
+  valentineTextOverlay: {
+    backgroundColor: 'rgba(255, 45, 85, 0.6)',
+    borderTopWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  valentineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF2D55',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  valentineBadgeText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

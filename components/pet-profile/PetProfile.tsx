@@ -5,15 +5,240 @@ import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
-import { Pet } from '@/constants/mock-data';
+import { Pet } from '@/types/pet';
 import { useIsFocused } from '@react-navigation/native';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/auth';
+import { storage } from '@/configs/firebase';
+import { ref, getDownloadURL, listAll } from 'firebase/storage';
+import { generateMatchScore } from '@/services/matching';
+import { doc, getDoc, getFirestore } from 'firebase/firestore';
 
 interface PetProfileProps {
   pet: Pet;
   onClose: () => void;
+}
+
+function MatchScoreIndicator({ score }: { score: number }) {
+  const segments = [
+    { label: 'Poor', threshold: 3, color: '#FF3B30' },
+    { label: 'Moderate', threshold: 6, color: '#FF9500' },
+    { label: 'Good', threshold: 8.5, color: '#5856D6' },
+    { label: 'Excellent', threshold: 10, color: '#34C759' },
+  ];
+
+  const currentSegment = segments.find(s => score <= s.threshold) || segments[segments.length - 1];
+  const percentage = Math.round(score * 10);
+
+  return (
+    <View style={styles.matchScoreContainer}>
+      <View style={styles.matchScoreHeader}>
+        <Text style={styles.matchScoreTitle}>Match Score</Text>
+        <View style={[styles.matchScoreBadge, { backgroundColor: currentSegment.color }]}>
+          <Text style={styles.matchScoreValue}>{percentage}%</Text>
+        </View>
+      </View>
+      <Text style={[styles.matchScoreLabel, { color: currentSegment.color }]}>
+        {currentSegment.label} Match
+      </Text>
+      <View style={styles.matchScoreBar}>
+        {segments.map((segment, index) => (
+          <View
+            key={segment.label}
+            style={[
+              styles.matchScoreSegment,
+              { backgroundColor: segment.color },
+              index === 0 && styles.matchScoreSegmentFirst,
+              index === segments.length - 1 && styles.matchScoreSegmentLast,
+              { opacity: score <= segment.threshold ? 1 : 0.3 }
+            ]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function MatchScoreLoadingIndicator() {
+  const pulseAnim = useRef(new RNAnimated.Value(0)).current;
+
+  useEffect(() => {
+    RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        RNAnimated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  const animatedStyle = {
+    opacity: pulseAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.3, 0.7],
+    }),
+  };
+
+  return (
+    <View style={styles.matchScoreContainer}>
+      <View style={styles.matchScoreHeader}>
+        <Text style={styles.matchScoreTitle}>Match Score</Text>
+        <View style={[styles.matchScoreBadge, styles.loadingBadge]}>
+          <RNAnimated.View style={[styles.loadingPulse, animatedStyle]} />
+        </View>
+      </View>
+      <View style={[styles.loadingLabel, styles.shimmer]}>
+        <RNAnimated.View style={[styles.loadingPulse, animatedStyle]} />
+      </View>
+      <View style={styles.matchScoreBar}>
+        {[...Array(4)].map((_, index) => (
+          <View
+            key={index}
+            style={[
+              styles.matchScoreSegment,
+              styles.loadingSegment,
+              index === 0 && styles.matchScoreSegmentFirst,
+              index === 3 && styles.matchScoreSegmentLast,
+            ]}
+          >
+            <RNAnimated.View style={[styles.loadingPulse, animatedStyle]} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function VideoPlayer({ videoUrl, thumbnailUrl }: { videoUrl: string, thumbnailUrl?: string }) {
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef<Video>(null);
+  const isFocused = useIsFocused();
+
+  // Load and auto-play video
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadVideo = async () => {
+      if (!videoRef.current) return;
+
+      try {
+        await videoRef.current.loadAsync(
+          { 
+            uri: videoUrl,
+            overrideFileExtensionAndroid: 'm3u8'
+          },
+          { 
+            shouldPlay: true, // Auto-play when loaded
+            isLooping: true,
+            isMuted: isMuted,
+            progressUpdateIntervalMillis: 500,
+          },
+          false
+        );
+
+        if (isMounted) {
+          setIsVideoLoaded(true);
+        }
+      } catch (error) {
+        console.error('[VideoPlayer] Error loading video:', error);
+        if (isMounted) {
+          setHasError(true);
+        }
+      }
+    };
+
+    loadVideo();
+    return () => {
+      isMounted = false;
+      if (videoRef.current) {
+        videoRef.current.unloadAsync();
+      }
+    };
+  }, [videoUrl]);
+
+  // Handle mute toggle
+  const handleMuteToggle = useCallback(async () => {
+    if (!videoRef.current || !isVideoLoaded) return;
+    
+    try {
+      await videoRef.current.setIsMutedAsync(!isMuted);
+      setIsMuted(!isMuted);
+    } catch (error) {
+      console.error('[VideoPlayer] Error toggling mute:', error);
+    }
+  }, [isMuted, isVideoLoaded]);
+
+  // Pause video when screen loses focus
+  useEffect(() => {
+    if (!isFocused && videoRef.current) {
+      videoRef.current.pauseAsync();
+    } else if (isFocused && videoRef.current && isVideoLoaded) {
+      videoRef.current.playAsync();
+    }
+  }, [isFocused, isVideoLoaded]);
+
+  return (
+    <View style={[StyleSheet.absoluteFill, styles.videoContainer]}>
+      {/* Show thumbnail while video loads */}
+      {!isVideoLoaded && thumbnailUrl && (
+        <Image
+          source={{ uri: thumbnailUrl }}
+          style={[StyleSheet.absoluteFill, styles.thumbnail]}
+          resizeMode="cover"
+        />
+      )}
+
+      <Video
+        ref={videoRef}
+        style={[
+          StyleSheet.absoluteFill,
+          { opacity: isVideoLoaded ? 1 : 0 }
+        ]}
+        resizeMode={ResizeMode.COVER}
+        shouldPlay={isFocused}
+        isLooping={true}
+        isMuted={isMuted}
+        useNativeControls={false}
+      />
+
+      {/* Mute toggle button */}
+      <Pressable 
+        style={styles.muteButton}
+        onPress={handleMuteToggle}
+      >
+        <Ionicons 
+          name={isMuted ? "volume-mute" : "volume-medium"} 
+          size={24} 
+          color="#fff"
+        />
+      </Pressable>
+
+      {/* Show loading indicator while video loads */}
+      {!isVideoLoaded && !hasError && (
+        <View style={styles.loadingOverlay}>
+          <PulsingPaw size={50} color="#fff" backgroundColor="rgba(18, 53, 36, 0.8)" />
+        </View>
+      )}
+
+      {/* Show error state */}
+      {hasError && (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={32} color="#fff" />
+          <Text style={styles.errorText}>Failed to load video</Text>
+        </View>
+      )}
+    </View>
+  );
 }
 
 export function PetProfile({ pet, onClose }: PetProfileProps) {
@@ -22,76 +247,102 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [loadedPhotos, setLoadedPhotos] = useState<string[]>([]);
+  const [isLoadingPhotos, setIsLoadingPhotos] = useState(true);
+  const [visiblePhotoIndexes, setVisiblePhotoIndexes] = useState<number[]>([0, 1]); // Start with first two photos
+  const photoUrlCache = useRef<Map<number, string>>(new Map());
   const videoRef = useRef<Video>(null);
   const isFocused = useIsFocused();
   const router = useRouter();
   const { user } = useAuth();
+  const [calculatingScore, setCalculatingScore] = useState(false);
+  const [currentScore, setCurrentScore] = useState<number | undefined>(pet.matchScore);
 
   const containerStyle = useMemo(() => [
     styles.container,
     { backgroundColor: Colors[theme].background }
   ], [theme]);
 
-  // Reset states when URL changes
-  useEffect(() => {
-    setIsVideoLoaded(false);
-    setHasError(false);
-    setIsPaused(false);
-    
-    // Attempt to load and play video immediately
-    if (videoRef.current) {
-      videoRef.current.loadAsync(
-        { 
-          uri: pet.videoUrl,
-          overrideFileExtensionAndroid: 'm3u8'
-        },
-        { 
-          shouldPlay: isFocused && !isPaused,
-          isLooping: true  // Ensure looping is set during load
-        },
-        false
-      );
-    }
-  }, [pet.videoUrl]);
-
-  // Handle screen focus/unfocus
-  useEffect(() => {
-    if (videoRef.current && isVideoLoaded) {
-      if (isFocused && !isPaused) {
-        videoRef.current.playAsync();
-        videoRef.current.setIsLoopingAsync(true);  // Ensure looping is set when playing
-      } else {
-        videoRef.current.pauseAsync();
-      }
-    }
-  }, [isFocused, isVideoLoaded, isPaused]);
-
-  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if ('error' in status) {
-      console.error('[PetProfile] Video playback error:', status.error);
-      setHasError(true);
-      setIsVideoLoaded(false);
+  // Optimized photo loading with lazy loading and caching
+  const loadPhoto = useCallback(async (index: number) => {
+    if (!pet.photos?.length || index >= pet.photos.length) {
+      setIsLoadingPhotos(false);
       return;
     }
 
-    if (status.isLoaded) {
-      if (!isVideoLoaded) {
-        console.log('[PetProfile] Video loaded successfully');
-        setIsVideoLoaded(true);
-        setHasError(false);
+    try {
+      const cachedUrl = photoUrlCache.current.get(index);
+      if (cachedUrl) {
+        setLoadedPhotos(prev => [...prev, cachedUrl]);
+        return;
       }
+
+      // Try to get photo from Firebase Storage first
+      const photosRef = ref(storage, `pets/${pet.id}/photos/${index}`);
+      let url;
+      
+      try {
+        url = await getDownloadURL(photosRef);
+      } catch (storageError) {
+        console.log(`⚠️ Firebase Storage failed for photo ${index}, trying original URL`);
+        // If Firebase Storage fails, try using the original URL
+        url = pet.photos[index];
+      }
+
+      if (!url) {
+        console.log(`⚠️ No valid URL found for photo ${index}`);
+        return;
+      }
+
+      photoUrlCache.current.set(index, url);
+      setLoadedPhotos(prev => [...prev, url]);
+    } catch (error) {
+      console.error(`❌ Error loading photo ${index}:`, error);
     }
-  }, [isVideoLoaded]);
+  }, [pet.id, pet.photos]);
 
-  const handleError = useCallback(() => {
-    console.error('[PetProfile] Video loading error');
-    setHasError(true);
-    setIsVideoLoaded(false);
-  }, []);
+  // Load initial visible photos
+  useEffect(() => {
+    const loadInitialPhotos = async () => {
+      setIsLoadingPhotos(true);
+      
+      // Don't try to load if there are no photos
+      if (!pet.photos?.length) {
+        console.log('⚠️ No photos available for pet');
+        setIsLoadingPhotos(false);
+        return;
+      }
 
-  const togglePlayPause = useCallback(() => {
-    setIsPaused(prev => !prev);
-  }, []);
+      try {
+        await Promise.all(visiblePhotoIndexes.map(index => loadPhoto(index)));
+      } catch (error) {
+        console.error('❌ Error loading initial photos:', error);
+      } finally {
+        setIsLoadingPhotos(false);
+      }
+    };
+
+    loadInitialPhotos();
+  }, [visiblePhotoIndexes, loadPhoto]);
+
+  // Handle photo scroll and lazy loading
+  const handlePhotoScroll = useCallback((event: any) => {
+    // Don't handle scroll if no photos
+    if (!pet.photos?.length) return;
+
+    const offset = event.nativeEvent.contentOffset.x;
+    const width = event.nativeEvent.layoutMeasurement.width;
+    const currentIndex = Math.floor(offset / width);
+    
+    // Load next two photos ahead
+    const nextIndexes = [currentIndex + 2, currentIndex + 3].filter(
+      i => i < pet.photos.length && !visiblePhotoIndexes.includes(i)
+    );
+    
+    if (nextIndexes.length > 0) {
+      setVisiblePhotoIndexes(prev => [...prev, ...nextIndexes]);
+    }
+  }, [pet.photos, visiblePhotoIndexes]);
 
   const handleStartChat = () => {
     if (!user || !pet) return;
@@ -111,6 +362,42 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
     });
   };
 
+  // Calculate match score based on current preferences
+  useEffect(() => {
+    const calculateScore = async () => {
+      if (!user) return;
+      
+      try {
+        setCalculatingScore(true);
+        
+        // Get current user preferences
+        const db = getFirestore();
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        
+        if (!userDoc.exists()) {
+          console.log('⚠️ User preferences not found');
+          return;
+        }
+
+        const preferences = userDoc.data().buyerPreferences;
+        if (!preferences) {
+          console.log('⚠️ No buyer preferences set');
+          return;
+        }
+
+        // Generate new match score with current preferences
+        const newScore = await generateMatchScore(pet, preferences, user.uid);
+        setCurrentScore(newScore);
+      } catch (error) {
+        console.error('❌ Error calculating match score:', error);
+      } finally {
+        setCalculatingScore(false);
+      }
+    };
+
+    calculateScore();
+  }, [user, pet]);
+
   return (
     <ScrollView style={containerStyle}>
       <View style={styles.videoContainer}>
@@ -127,44 +414,10 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
           </View>
         </Pressable>
 
-        <Pressable 
-          onPress={togglePlayPause}
-          style={StyleSheet.absoluteFill}
-        >
-          <Video
-            ref={videoRef}
-            source={{ 
-              uri: pet.videoUrl,
-              overrideFileExtensionAndroid: 'm3u8'
-            }}
-            style={[
-              styles.video,
-              { opacity: isVideoLoaded ? 1 : 0 }
-            ]}
-            shouldPlay={isFocused && !isPaused}
-            isLooping
-            isMuted={false}
-            resizeMode={ResizeMode.COVER}
-            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-            onError={handleError}
-            useNativeControls={false}
-            progressUpdateIntervalMillis={500}
-          />
-          {isVideoLoaded && isPaused && (
-            <View style={styles.pauseOverlay}>
-              <Ionicons name="play" size={50} color="white" />
-            </View>
-          )}
-        </Pressable>
-        {(!isVideoLoaded && !hasError) && (
-          <PulsingPaw />
-        )}
-        {hasError && (
-          <View style={styles.errorOverlay}>
-            <Ionicons name="alert-circle-outline" size={32} color="#fff" />
-            <Text style={styles.errorText}>Failed to load video</Text>
-          </View>
-        )}
+        <VideoPlayer 
+          videoUrl={pet.videoUrl} 
+          thumbnailUrl={pet.photos?.[0]}
+        />
       </View>
 
       <View style={styles.content}>
@@ -173,11 +426,14 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
             <Text style={styles.name}>{pet.name}, {pet.age}</Text>
             <Text style={styles.location}>{pet.location}</Text>
           </View>
-          <View style={styles.scoreContainer}>
-            <Text style={styles.scoreLabel}>Match</Text>
-            <Text style={styles.score}>{pet.matchScore}</Text>
-          </View>
         </View>
+
+        {/* Dynamic match score section */}
+        {calculatingScore ? (
+          <MatchScoreLoadingIndicator />
+        ) : currentScore ? (
+          <MatchScoreIndicator score={currentScore} />
+        ) : null}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
@@ -202,14 +458,31 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Photos</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosContainer}>
-            {pet.photos.map((photo, index) => (
-              <Image
-                key={index}
-                source={{ uri: photo }}
-                style={styles.photo}
-              />
-            ))}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            style={styles.photosContainer}
+            onScroll={handlePhotoScroll}
+            scrollEventThrottle={16}
+          >
+            {isLoadingPhotos ? (
+              <View style={styles.loadingPhotoContainer}>
+                <PulsingPaw size={32} color={Colors.light.primary} backgroundColor="transparent" />
+              </View>
+            ) : loadedPhotos.length > 0 ? (
+              loadedPhotos.map((photo, index) => (
+                <Image
+                  key={index}
+                  source={{ uri: photo }}
+                  style={styles.photo}
+                />
+              ))
+            ) : (
+              <View style={styles.noPhotosContainer}>
+                <Ionicons name="images-outline" size={32} color="#666" />
+                <Text style={styles.noPhotosText}>No photos available</Text>
+              </View>
+            )}
           </ScrollView>
         </View>
 
@@ -269,18 +542,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#666',
     marginTop: 4,
-  },
-  scoreContainer: {
-    alignItems: 'center',
-  },
-  scoreLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  score: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.light.primary,
   },
   section: {
     marginBottom: 24,
@@ -342,13 +603,72 @@ const styles = StyleSheet.create({
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(18, 53, 36, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  errorOverlay: {
+  loadingContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingPhotoContainer: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    backgroundColor: '#f0f0f0',
+    position: 'relative',
+    marginRight: 12,
+  },
+  noPhotosContainer: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noPhotosText: {
+    marginTop: 8,
+    color: '#666',
+    fontSize: 14,
+  },
+  loadingBadge: {
+    width: 70,
+    height: 32,
+    backgroundColor: '#e0e0e0',
+    overflow: 'hidden',
+  },
+  loadingLabel: {
+    width: 120,
+    height: 24,
+    borderRadius: 4,
+    marginBottom: 8,
+    backgroundColor: '#e0e0e0',
+    overflow: 'hidden',
+  },
+  loadingSegment: {
+    backgroundColor: '#e0e0e0',
+    overflow: 'hidden',
+  },
+  loadingPulse: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: '#f5f5f5',
+  },
+  shimmer: {
+    overflow: 'hidden',
+  },
+  thumbnail: {
+    backgroundColor: '#123524',
+  },
+  playButton: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -356,12 +676,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     marginTop: 8,
-  },
-  pauseOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   chatButton: {
     backgroundColor: Colors.light.primary,
@@ -398,4 +712,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  matchScoreContainer: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 16,
+  },
+  matchScoreHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  matchScoreTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  matchScoreBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  matchScoreValue: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  matchScoreLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  matchScoreBar: {
+    flexDirection: 'row',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  matchScoreSegment: {
+    flex: 1,
+    marginHorizontal: 1,
+  },
+  matchScoreSegmentFirst: {
+    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 4,
+  },
+  matchScoreSegmentLast: {
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  muteButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  } as const,
 }); 
