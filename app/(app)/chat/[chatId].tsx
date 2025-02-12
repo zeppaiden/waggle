@@ -9,8 +9,9 @@ import { format } from 'date-fns';
 import { usePets } from '@/hooks/usePets';
 import { useAuth } from '@/contexts/auth';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
-import { db } from '@/configs/firebase';
+import { db, storage } from '@/configs/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where } from 'firebase/firestore';
+import { ref, getDownloadURL } from 'firebase/storage';
 import { useFavorites } from '@/hooks/useFavorites';
 import { generateAIResponse } from '@/services/openai';
 
@@ -91,6 +92,9 @@ export default function ChatDetailScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [petImage, setPetImage] = useState<string | null>(null);
+  const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const [isTyping, setIsTyping] = useState(false);
   const { addFavorite, removeFavorite, isFavorite } = useFavorites(user?.uid || '');
@@ -99,6 +103,38 @@ export default function ChatDetailScreen() {
 
   const chatId = params.chatId as string;
   const pet = pets.find(p => p.id === chatId);
+
+  const loadPetImage = async () => {
+    if (!pet) return;
+    
+    try {
+      setImageLoading(true);
+      setImageError(false);
+      
+      // Try to get photo from Firebase Storage first
+      const photosRef = ref(storage, `pets/${pet.id}/photos/0.jpg`);
+      try {
+        const url = await getDownloadURL(photosRef);
+        setPetImage(url);
+      } catch (storageError) {
+        console.log(`⚠️ Firebase Storage failed for pet ${pet.id}, trying original URL`);
+        // If Firebase Storage fails, try using the original URL
+        setPetImage(pet.photos[0] || pet.videoUrl);
+      }
+    } catch (error) {
+      console.error(`❌ Error loading image for pet ${pet.id}:`, error);
+      setImageError(true);
+      setPetImage(pet.photos[0] || pet.videoUrl); // Fallback to original URL
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (pet) {
+      loadPetImage();
+    }
+  }, [pet]);
 
   // Add this helper function at the component level
   const scrollToBottom = (animated = true) => {
@@ -308,10 +344,20 @@ export default function ChatDetailScreen() {
           style={styles.headerContent}
           onPress={() => router.push(`/pet/${chatId}`)}
         >
-          <Image 
-            source={{ uri: params.petImage as string }}
-            style={styles.petImage}
-          />
+          {imageLoading ? (
+            <View style={[styles.petImage, styles.petImageLoading]}>
+              <PulsingPaw size={24} backgroundColor="transparent" />
+            </View>
+          ) : imageError ? (
+            <View style={[styles.petImage, styles.petImageError]}>
+              <Ionicons name="image-outline" size={24} color="#666" />
+            </View>
+          ) : (
+            <Image 
+              source={{ uri: petImage || undefined }}
+              style={styles.petImage}
+            />
+          )}
           <View style={styles.headerText}>
             <Text style={styles.petName}>{params.petName as string}</Text>
             <Text style={styles.ownerName}>{params.ownerName as string}</Text>
@@ -572,5 +618,15 @@ const styles = StyleSheet.create({
   favoriteButton: {
     padding: 8,
     marginLeft: 8,
+  },
+  petImageLoading: {
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  petImageError: {
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 

@@ -10,56 +10,81 @@ const openai = new OpenAI({
 });
 
 const SYSTEM_PROMPT = `You are an expert pet adoption matchmaker. Your task is to evaluate the compatibility between a potential adopter and a pet.
-Please analyze the provided pet details, adopter preferences, and interaction history to generate a compatibility percentage from 1 to 100, where:
-1-30: Poor match (significant misalignment in key preferences)
-31-60: Moderate match (some alignment with room for flexibility)
-61-85: Good match (strong alignment with minor differences)
-86-100: Excellent match (exceptional compatibility)
-
-Consider these factors with their respective weights:
-1. Species and size alignment (25%)
-   - Species match is important but not disqualifying
-   - Size within or close to preferred range
-   - Partial credit for similar sizes (e.g., medium vs large)
-
-2. Activity level and living space compatibility (20%)
-   - Activity level alignment with some flexibility
-   - Living space suitability with partial credit for similar spaces
-   - Consider adaptability of the pet
-
-3. Experience and care requirements (15%)
-   - Experience level relative to pet's needs
-   - Partial credit for close experience levels
-   - Consider pet's trainability and adaptability
-
-4. Age and location preferences (15%)
-   - Age within or near preferred range
-   - Location within reasonable distance
-   - More forgiving for exceptional matches in other areas
-
-5. Lifestyle compatibility (15%)
-   - Children and other pets compatibility
-   - Partial credit for adaptable pets
-   - Consider pet's socialization history
-
-6. Historical preference alignment (10%)
-   - Similarity to favorited pets
-   - Learning from past interactions
-   - Pattern recognition in preferences
+Please analyze the provided pet details, adopter preferences, and interaction history to generate a precise compatibility percentage from 1 to 100.
 
 Scoring Guidelines:
-- Output a specific percentage between 1 and 100
-- Allow for high scores (90%+) when core preferences align well
-- Consider the pet's adaptability and training potential
-- Give partial credit for near-matches in preferences
-- Factor in the strength of the match in key areas
-- Consider the overall potential for a successful adoption
+1. Use the full range of scores (1-100) with a balanced distribution
+2. Avoid extreme low scores (<20) unless there are severe incompatibilities
+3. Consider each factor independently before combining
+4. Most matches should fall in the 40-80 range
+5. Factor weights:
+   - Species alignment (15%)
+   - Breed compatibility (15%)
+   - Size alignment (10%)
+   - Activity level and living space (15%)
+   - Experience and care requirements (15%)
+   - Age and location preferences (15%)
+   - Lifestyle compatibility (10%)
+   - Historical preference alignment (5%)
 
-A score above 90% indicates an exceptionally strong match where:
-- Core preferences align very well
-- Any minor differences are easily manageable
-- The pet's characteristics suggest high adaptability
-- The match shows strong potential for a successful adoption
+Breed Compatibility Analysis:
+- Consider breed-specific needs (exercise, grooming, training)
+- Factor in breed temperament with living situation
+- Evaluate breed-specific health considerations
+- Match breed energy levels to activity preferences
+- Account for breed size variations within size categories
+
+Scoring Bands and Examples:
+1-20: Severe Incompatibility (Rare)
+- Wrong species AND completely incompatible size
+- Breed requires expertise far beyond experience level
+- Multiple major lifestyle conflicts
+
+21-40: Basic Compatibility
+- Correct species but breed needs don't align
+- Some experience concerns with high-maintenance breed
+- Several compromises needed
+
+41-60: Moderate Match (Common)
+- Most basic requirements met
+- Breed maintenance level matches experience
+- Average compatibility in key areas
+- Typical first-time pet owner match
+
+61-80: Good Match (Common)
+- Strong compatibility in most areas
+- Breed temperament suits lifestyle
+- Good experience level for breed needs
+- Positive interaction patterns
+- Similar to previous successful adoptions
+
+81-90: Excellent Match (Regular)
+- Very strong compatibility
+- Breed-specific needs well matched
+- Great experience level
+- Location and lifestyle align well
+- Strong historical preference patterns
+
+91-100: Perfect Match (Occasional)
+- Exceptional compatibility across all factors
+- Ideal breed match for preferences
+- Perfect lifestyle fit
+- Proven success with similar breeds
+- Outstanding experience level
+
+Granularity Rules:
+1. Two pets should NEVER get the same score unless EXACTLY identical in ALL aspects
+2. Even minor breed differences should affect the score
+3. Each difference in traits must impact the score by at least 1 point
+4. Consider decimal points for extremely close matches
+5. Factor in subtle breed variations within same species
+
+Remember:
+- Most matches should fall between 40-80
+- Scores below 20 should be rare
+- Don't be overly harsh - focus on potential for success
+- Consider positive factors as much as negative ones
+- Every breed has unique characteristics that affect matching
 
 Output only a number between 1 and 100, with no additional text.`;
 
@@ -196,6 +221,13 @@ Interaction History Analysis:
 - Similar to Favorited Pets: ${patterns.favoritePatterns}
 - Similar to Disliked Pets: ${patterns.dislikePatterns}`;
 
+    // Log the complete prompt being sent to the API
+    console.log('🤖 Sending prompt to AI:');
+    console.log('=== SYSTEM PROMPT ===');
+    console.log(SYSTEM_PROMPT);
+    console.log('=== PET INFO ===');
+    console.log(petInfo);
+
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -203,7 +235,7 @@ Interaction History Analysis:
         { role: 'user', content: petInfo }
       ],
       temperature: 0.1,
-      max_tokens: 2,
+      max_tokens: 3,
       presence_penalty: -0.5,
       frequency_penalty: 0,
     });
@@ -211,25 +243,22 @@ Interaction History Analysis:
     const scoreText = response.choices[0].message.content?.trim() || '50';
     const score = parseFloat(scoreText);
 
-    // Log the response and normalize to 1-10 scale
-    console.log('🔍 Raw OpenAI Match Score:', score);
+    // Log the score
+    console.log('🔍 Match Score:', score);
     
-    // Validate and normalize the score to 1-10 range
+    // Validate the score
     if (isNaN(score)) {
-      console.warn('⚠️ Invalid score returned from AI, defaulting to 5');
-      return 5;
+      console.warn('⚠️ Invalid score returned from AI, defaulting to 50');
+      return 50;
     }
     
-    // Convert 1-100 scale to 1-10 scale
-    const normalizedScore = (score / 10);
-    console.log('🔍 Normalized Match Score (1-10):', normalizedScore);
-    
-    return Math.min(Math.max(normalizedScore, 1), 10);
+    // Return the raw score, constrained to 1-100 range
+    return Math.min(Math.max(score, 1), 100);
 
   } catch (error) {
     console.error('❌ Error generating match score:', error);
     // Default to a neutral score if there's an error
-    return 5;
+    return 50;
   }
 }
 

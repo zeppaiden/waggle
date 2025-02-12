@@ -14,6 +14,6 @@ export type Pet = {
     verified: boolean;
   };
   photos: string[];
-  species: 'dog' | 'cat' | 'other';
+  species: 'dog' | 'cat' | 'bunny' | 'other';
   size: 'small' | 'medium' | 'large';
 }; 

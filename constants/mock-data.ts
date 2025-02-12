@@ -1,23 +1,9 @@
+import { Pet } from '@/types/pet';
+
 export type Owner = {
   id: string;
   name: string;
   verified: boolean;
-};
-
-export type Pet = {
-  id: string;
-  videoUrl: string;
-  name: string;
-  age: number;
-  location: string;
-  matchScore: number;
-  breed: string;
-  description: string;
-  interests: string[];
-  owner: Owner;
-  photos: string[];
-  species: 'dog' | 'cat' | 'bunny' | 'other';
-  size: 'small' | 'medium' | 'large';
 };
 
 export type FavoriteFilters = {
@@ -30,7 +16,6 @@ export type FavoriteFilters = {
 export const MOCK_PETS: Pet[] = [
   {
     id: '1',
-    // videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
     videoUrl: 'https://stream.mux.com/oZtoho3dz2lW017OMTr20002lWLkvy9dnAS6WlDmRW46Z8.m3u8',
     name: 'Max',
     age: 3,

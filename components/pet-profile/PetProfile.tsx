@@ -22,14 +22,14 @@ interface PetProfileProps {
 
 function MatchScoreIndicator({ score }: { score: number }) {
   const segments = [
-    { label: 'Poor', threshold: 3, color: '#FF3B30' },
-    { label: 'Moderate', threshold: 6, color: '#FF9500' },
-    { label: 'Good', threshold: 8.5, color: '#5856D6' },
-    { label: 'Excellent', threshold: 10, color: '#34C759' },
+    { label: 'Poor', threshold: 30, color: '#FF3B30' },
+    { label: 'Moderate', threshold: 60, color: '#FF9500' },
+    { label: 'Good', threshold: 85, color: '#5856D6' },
+    { label: 'Excellent', threshold: 100, color: '#34C759' },
   ];
 
   const currentSegment = segments.find(s => score <= s.threshold) || segments[segments.length - 1];
-  const percentage = Math.round(score * 10);
+  const percentage = Math.round(score);
 
   return (
     <View style={styles.matchScoreContainer}>
@@ -247,16 +247,16 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [loadedPhotos, setLoadedPhotos] = useState<string[]>([]);
   const [isLoadingPhotos, setIsLoadingPhotos] = useState(true);
-  const [visiblePhotoIndexes, setVisiblePhotoIndexes] = useState<number[]>([0, 1]); // Start with first two photos
   const photoUrlCache = useRef<Map<number, string>>(new Map());
-  const videoRef = useRef<Video>(null);
-  const isFocused = useIsFocused();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const isScrolling = useRef(false);
+  const scrollTimeout = useRef<NodeJS.Timeout>();
   const router = useRouter();
   const { user } = useAuth();
   const [calculatingScore, setCalculatingScore] = useState(false);
   const [currentScore, setCurrentScore] = useState<number | undefined>(pet.matchScore);
+  const [photoLoadTrigger, setPhotoLoadTrigger] = useState(0); // Force rerenders when photos load
 
   const containerStyle = useMemo(() => [
     styles.container,
@@ -265,24 +265,19 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
 
   // Optimized photo loading with lazy loading and caching
   const loadPhoto = useCallback(async (index: number) => {
-    if (!pet.photos?.length || index >= pet.photos.length) {
-      setIsLoadingPhotos(false);
-      return;
-    }
+    if (!pet.photos?.length || index >= pet.photos.length) return;
+    if (photoUrlCache.current.has(index)) return;
 
+    console.log(`🔍 Loading photo ${index} for pet ${pet.id}`);
+    
     try {
-      const cachedUrl = photoUrlCache.current.get(index);
-      if (cachedUrl) {
-        setLoadedPhotos(prev => [...prev, cachedUrl]);
-        return;
-      }
-
       // Try to get photo from Firebase Storage first
-      const photosRef = ref(storage, `pets/${pet.id}/photos/${index}`);
+      const photosRef = ref(storage, `pets/${pet.id}/photos/${index}.jpg`);
       let url;
       
       try {
         url = await getDownloadURL(photosRef);
+        console.log(`✅ Loaded photo ${index} from Firebase Storage`);
       } catch (storageError) {
         console.log(`⚠️ Firebase Storage failed for photo ${index}, trying original URL`);
         // If Firebase Storage fails, try using the original URL
@@ -295,18 +290,20 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
       }
 
       photoUrlCache.current.set(index, url);
-      setLoadedPhotos(prev => [...prev, url]);
+      // Force a rerender when new photo is loaded
+      setPhotoLoadTrigger(prev => prev + 1);
+      console.log(`✨ Photo ${index} cached successfully`);
     } catch (error) {
       console.error(`❌ Error loading photo ${index}:`, error);
     }
   }, [pet.id, pet.photos]);
 
-  // Load initial visible photos
+  // Load initial photos
   useEffect(() => {
     const loadInitialPhotos = async () => {
+      console.log('🔄 Starting initial photo load');
       setIsLoadingPhotos(true);
       
-      // Don't try to load if there are no photos
       if (!pet.photos?.length) {
         console.log('⚠️ No photos available for pet');
         setIsLoadingPhotos(false);
@@ -314,21 +311,36 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
       }
 
       try {
-        await Promise.all(visiblePhotoIndexes.map(index => loadPhoto(index)));
+        console.log(`📸 Loading first ${Math.min(2, pet.photos.length)} photos`);
+        // Load first two photos (or all if less than 2)
+        const initialIndexes = Array.from(
+          { length: Math.min(2, pet.photos.length) }, 
+          (_, i) => i
+        );
+        await Promise.all(initialIndexes.map(index => loadPhoto(index)));
       } catch (error) {
         console.error('❌ Error loading initial photos:', error);
       } finally {
+        console.log('✅ Initial photo loading complete');
         setIsLoadingPhotos(false);
       }
     };
 
     loadInitialPhotos();
-  }, [visiblePhotoIndexes, loadPhoto]);
+  }, [loadPhoto, pet.photos]);
 
   // Handle photo scroll and lazy loading
   const handlePhotoScroll = useCallback((event: any) => {
-    // Don't handle scroll if no photos
-    if (!pet.photos?.length) return;
+    if (!pet.photos?.length || isScrolling.current) return;
+
+    isScrolling.current = true;
+    if (scrollTimeout.current) {
+      clearTimeout(scrollTimeout.current);
+    }
+
+    scrollTimeout.current = setTimeout(() => {
+      isScrolling.current = false;
+    }, 150);
 
     const offset = event.nativeEvent.contentOffset.x;
     const width = event.nativeEvent.layoutMeasurement.width;
@@ -336,13 +348,38 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
     
     // Load next two photos ahead
     const nextIndexes = [currentIndex + 2, currentIndex + 3].filter(
-      i => i < pet.photos.length && !visiblePhotoIndexes.includes(i)
+      i => i < pet.photos.length && !photoUrlCache.current.has(i)
     );
     
     if (nextIndexes.length > 0) {
-      setVisiblePhotoIndexes(prev => [...prev, ...nextIndexes]);
+      console.log(`🔄 Loading next photos: ${nextIndexes.join(', ')}`);
+      nextIndexes.forEach(loadPhoto);
     }
-  }, [pet.photos, visiblePhotoIndexes]);
+  }, [pet.photos, loadPhoto]);
+
+  // Render photos using cached URLs
+  const renderPhotos = useMemo(() => {
+    if (!pet.photos?.length) {
+      console.log('⚠️ No photos to render');
+      return null;
+    }
+
+    const photos = pet.photos.map((_, index) => {
+      const url = photoUrlCache.current.get(index);
+      if (!url) return null;
+
+      return (
+        <Image
+          key={`${index}-${url}`}
+          source={{ uri: url }}
+          style={styles.photo}
+        />
+      );
+    }).filter(Boolean);
+
+    console.log(`📸 Rendering ${photos.length} photos`);
+    return photos;
+  }, [pet.photos, photoLoadTrigger]); // Rerender when photos load
 
   const handleStartChat = () => {
     if (!user || !pet) return;
@@ -459,6 +496,7 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Photos</Text>
           <ScrollView 
+            ref={scrollViewRef}
             horizontal 
             showsHorizontalScrollIndicator={false} 
             style={styles.photosContainer}
@@ -469,14 +507,8 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
               <View style={styles.loadingPhotoContainer}>
                 <PulsingPaw size={32} color={Colors.light.primary} backgroundColor="transparent" />
               </View>
-            ) : loadedPhotos.length > 0 ? (
-              loadedPhotos.map((photo, index) => (
-                <Image
-                  key={index}
-                  source={{ uri: photo }}
-                  style={styles.photo}
-                />
-              ))
+            ) : renderPhotos && renderPhotos.length > 0 ? (
+              renderPhotos
             ) : (
               <View style={styles.noPhotosContainer}>
                 <Ionicons name="images-outline" size={32} color="#666" />

@@ -61,7 +61,7 @@ export default function OwnerProfileStep({ data, onNext, onBack }: OwnerProfileS
         const blob = await response.blob();
 
         // Upload to Firebase Storage
-        const photoRef = ref(storage, `pets/${petId}/photos/${photo.fileName}`);
+        const photoRef = ref(storage, `pets/${petId}/photos/${photo.fileName}.jpg`);
         await uploadBytes(photoRef, blob);
 
         // Get download URL

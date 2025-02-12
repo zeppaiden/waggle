@@ -285,18 +285,18 @@ function PetCard({ pet, style, isNext = false }: PetCardProps) {
   const [isMuted, setIsMuted] = useState(true);
   const badgeScale = useSharedValue(1);
   const isValentineMatch = useMemo(() => {
-    // Valentine's match criteria:
-    // 1. Young or senior pets for special Valentine's promotion
-    // 2. Must have loving personality traits
-    // 3. Must be close by (within 5km)
-    const isYoungOrSenior = pet.age <= 3 || pet.age >= 8;
-    const hasLovingPersonality = pet.interests.some((interest: string) => 
-      ['Cuddling', 'Affectionate', 'Gentle', 'Friendly', 'Social'].includes(interest)
-    );
-    const isNearby = parseFloat(pet.location.split(' ')[0]) <= 5;
+    // Only check if match score is high enough (75% or higher)
+    if (!pet.matchScore || pet.matchScore < 75) return false;
+
+    // Use pet ID to generate a consistent random value
+    const hash = pet.id.split('').reduce((acc: number, char: string) => {
+      return char.charCodeAt(0) + ((acc << 5) - acc);
+    }, 0);
+    const normalizedHash = Math.abs(hash) / (2 ** 32);
     
-    return isYoungOrSenior && hasLovingPersonality && isNearby;
-  }, [pet.age, pet.interests, pet.location]);
+    // Randomly select 75% of eligible pets
+    return normalizedHash < 0.75;
+  }, [pet.matchScore, pet.id]);
 
   useEffect(() => {
     if (isValentineMatch) {

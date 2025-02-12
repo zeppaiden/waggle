@@ -8,8 +8,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/auth';
 import { formatDistanceToNow } from 'date-fns';
 import { usePets } from '@/hooks/usePets';
-import { db } from '@/configs/firebase';
+import { db, storage } from '@/configs/firebase';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, getDocs } from 'firebase/firestore';
+import { ref, getDownloadURL } from 'firebase/storage';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
 
 type Message = {
@@ -29,6 +30,8 @@ type Chat = {
   ownerId: string;
   ownerName: string;
   lastMessage: Message;
+  imageLoading?: boolean;
+  imageError?: boolean;
 };
 
 export default function ChatScreen() {
@@ -47,6 +50,28 @@ export default function ChatScreen() {
     return `${userId}_${petId}`;
   };
 
+  const loadPetImage = async (pet: any): Promise<string> => {
+    try {
+      // Try to get photo from Firebase Storage first
+      const photosRef = ref(storage, `pets/${pet.id}/photos/0.jpg`);
+      try {
+        const url = await getDownloadURL(photosRef);
+        console.log(`✅ Loaded avatar for pet ${pet.id} from Firebase Storage`);
+        return url;
+      } catch (storageError) {
+        console.log(`⚠️ Firebase Storage failed for pet ${pet.id}, trying original URL`);
+        // If Firebase Storage fails, try using the original URL
+        if (pet.photos?.[0]) {
+          return pet.photos[0];
+        }
+        return pet.videoUrl; // Final fallback
+      }
+    } catch (error) {
+      console.error(`❌ Error loading avatar for pet ${pet.id}:`, error);
+      return pet.photos?.[0] || pet.videoUrl; // Fallback to original URL
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -60,7 +85,7 @@ export default function ChatScreen() {
       orderBy('timestamp', 'desc')
     );
 
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+    const unsubscribe = onSnapshot(messagesQuery, async (snapshot) => {
       // Group messages by uniqueChatId to get latest message for each chat
       const chatMessages = new Map<string, Message>();
       snapshot.docs.forEach(doc => {
@@ -77,20 +102,34 @@ export default function ChatScreen() {
         }
       });
 
-      // Convert messages to chat objects
-      const chatList = Array.from(chatMessages.values()).map(message => {
-        const pet = pets.find(p => p.id === message.chatId);
-        if (!pet) return null;
+      // Convert messages to chat objects with loading states
+      const chatList = await Promise.all(
+        Array.from(chatMessages.values()).map(async (message) => {
+          const pet = pets.find(p => p.id === message.chatId);
+          if (!pet) return null;
 
-        return {
-          petId: pet.id,
-          petName: pet.name,
-          petImage: pet.photos[0] || pet.videoUrl,
-          ownerId: pet.owner.id,
-          ownerName: pet.owner.name,
-          lastMessage: message,
-        };
-      }).filter((chat): chat is Chat => chat !== null);
+          const chat: Chat = {
+            petId: pet.id,
+            petName: pet.name,
+            petImage: '',
+            ownerId: pet.owner.id,
+            ownerName: pet.owner.name,
+            lastMessage: message,
+            imageLoading: true,
+          };
+
+          try {
+            chat.petImage = await loadPetImage(pet);
+            chat.imageLoading = false;
+          } catch (error) {
+            console.error(`❌ Failed to load image for pet ${pet.id}:`, error);
+            chat.imageLoading = false;
+            chat.imageError = true;
+          }
+
+          return chat;
+        })
+      ).then(chats => chats.filter((chat): chat is Chat => chat !== null));
 
       console.log('[ChatList] Updated chats:', { count: chatList.length });
       setChats(chatList);
@@ -237,10 +276,21 @@ export default function ChatScreen() {
           </Animated.View>
         )}
 
-        <Image 
-          source={{ uri: item.petImage }}
-          style={styles.petImage}
-        />
+        {item.imageLoading ? (
+          <View style={[styles.petImage, styles.petImageLoading]}>
+            <PulsingPaw size={24} backgroundColor="transparent" />
+          </View>
+        ) : item.imageError ? (
+          <View style={[styles.petImage, styles.petImageError]}>
+            <Ionicons name="image-outline" size={24} color="#666" />
+          </View>
+        ) : (
+          <Image 
+            source={{ uri: item.petImage }}
+            style={styles.petImage}
+          />
+        )}
+
         <View style={styles.chatContent}>
           <View style={styles.chatHeader}>
             <Text style={styles.petName}>{item.petName}</Text>
@@ -408,5 +458,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 3,
+  },
+  petImageLoading: {
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  petImageError: {
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
