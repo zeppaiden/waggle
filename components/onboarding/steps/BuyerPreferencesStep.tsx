@@ -35,6 +35,11 @@ type IconComponent = typeof Dog;
 
 const PET_TYPES: { value: PetType; Icon: IconComponent; label: string }[] = [
   { 
+    value: 'ANY',
+    Icon: PawPrint,
+    label: 'Any'
+  },
+  { 
     value: 'DOG',
     Icon: Dog,
     label: 'Dogs'
@@ -58,12 +63,7 @@ const PET_TYPES: { value: PetType; Icon: IconComponent; label: string }[] = [
     value: 'FISH',
     Icon: Fish,
     label: 'Fish'
-  },
-  { 
-    value: 'OTHER',
-    Icon: PawPrint,
-    label: 'Other Pets'
-  },
+  }
 ];
 
 const SIZE_PREFERENCES: SizePreference[] = ['small', 'medium', 'large', 'any'];
@@ -80,22 +80,14 @@ const LIVING_SPACES: { value: LivingSpace; Icon: IconComponent }[] = [
 type SliderValue = number;
 
 export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPreferencesStepProps) {
-  console.log('BuyerPreferencesStep props:', {
-    hasData: !!data,
-    dataKeys: data ? Object.keys(data) : [],
-    hasOnNext: !!onNext,
-    hasOnBack: !!onBack
-  });
-
   useEffect(() => {
-    console.log('BuyerPreferencesStep mounted');
     return () => {
-      console.log('BuyerPreferencesStep unmounted');
+      // Cleanup if needed
     };
   }, []);
 
   const [preferences, setPreferences] = useState({
-    petTypes: data.buyerPreferences?.petTypes || [],
+    petTypes: data.buyerPreferences?.petTypes || ['ANY'],
     sizePreferences: data.buyerPreferences?.sizePreferences || ['any'],
     activityLevel: data.buyerPreferences?.activityLevel || 'any',
     maxDistance: data.buyerPreferences?.maxDistance || 50,
@@ -106,9 +98,10 @@ export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPref
     ageRange: data.buyerPreferences?.ageRange || { min: 0, max: 20 },
   });
 
-  console.log('Current preferences state:', preferences);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
 
   const handleNext = () => {
+    setIsCreatingProfile(true);
     onNext({
       ...data,
       buyerPreferences: preferences,
@@ -116,8 +109,10 @@ export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPref
   };
 
   const renderPetTypeChip = (type: PetType, Icon: IconComponent, label: string) => {
-    console.log('Rendering pet type chip:', { type, label });
-    const isSelected = preferences.petTypes.includes(type);
+    const isSelected = preferences.petTypes.includes('ANY')
+      ? type === 'ANY' || preferences.petTypes.includes(type)
+      : preferences.petTypes.includes(type);
+
     return (
       <Pressable
         key={type}
@@ -125,12 +120,24 @@ export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPref
           styles.iconChip,
           isSelected && styles.iconChipSelected
         ]}
-        onPress={() => setPreferences(prev => ({
-          ...prev,
-          petTypes: prev.petTypes.includes(type)
-            ? prev.petTypes.filter(t => t !== type)
-            : [...prev.petTypes, type]
-        }))}
+        onPress={() => {
+          if (type === 'ANY') {
+            setPreferences(prev => ({
+              ...prev,
+              petTypes: ['ANY']
+            }));
+            return;
+          }
+
+          setPreferences(prev => ({
+            ...prev,
+            petTypes: prev.petTypes.includes('ANY')
+              ? [type]
+              : prev.petTypes.includes(type)
+                ? prev.petTypes.filter(t => t !== type)
+                : [...prev.petTypes, type]
+          }));
+        }}
       >
         <View style={[styles.iconContainer, isSelected && styles.iconContainerSelected]}>
           <Icon 
@@ -147,7 +154,6 @@ export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPref
   };
 
   const renderLivingSpaceChip = (space: LivingSpace, Icon: IconComponent) => {
-    console.log('Rendering living space chip:', space);
     const isSelected = preferences.livingSpace === space;
     return (
       <Pressable
@@ -194,15 +200,12 @@ export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPref
     </Pressable>
   );
 
-  const renderSection = (title: string, children: React.ReactNode) => {
-    console.log('Rendering section:', title);
-    return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {children}
-      </View>
-    );
-  };
+  const renderSection = (title: string, children: React.ReactNode) => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {children}
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -310,7 +313,7 @@ export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPref
 
           {renderSection('Maximum Distance', (
             <View style={styles.sliderContainer}>
-              <Text style={styles.sliderValue}>{preferences.maxDistance} miles</Text>
+              <Text style={styles.sliderValue}>{preferences.maxDistance} km</Text>
               <Slider
                 style={styles.slider}
                 minimumValue={5}
@@ -331,11 +334,20 @@ export default function BuyerPreferencesStep({ data, onNext, onBack }: BuyerPref
 
         <View style={styles.footer}>
           <Pressable
-            style={[styles.button, styles.nextButton]}
+            style={[
+              styles.button, 
+              styles.nextButton,
+              isCreatingProfile && styles.nextButtonDisabled
+            ]}
             onPress={handleNext}
+            disabled={isCreatingProfile}
           >
-            <Text style={styles.nextButtonText}>Next</Text>
-            <ArrowRight size={24} color="#fff" strokeWidth={1.5} style={styles.nextButtonIcon} />
+            <Text style={styles.nextButtonText}>
+              {isCreatingProfile ? 'Creating profile...' : 'Next'}
+            </Text>
+            {!isCreatingProfile && (
+              <ArrowRight size={24} color="#fff" strokeWidth={1.5} style={styles.nextButtonIcon} />
+            )}
           </Pressable>
         </View>
       </Animated.View>
@@ -530,5 +542,8 @@ const styles = StyleSheet.create({
   },
   nextButtonIcon: {
     marginLeft: 4,
+  },
+  nextButtonDisabled: {
+    opacity: 0.7,
   },
 }); 

@@ -9,84 +9,44 @@ const openai = new OpenAI({
   dangerouslyAllowBrowser: true // Required for React Native
 });
 
-const SYSTEM_PROMPT = `You are an expert pet adoption matchmaker. Your task is to evaluate the compatibility between a potential adopter and a pet.
-Please analyze the provided pet details, adopter preferences, and interaction history to generate a precise compatibility percentage from 1 to 100.
+const SYSTEM_PROMPT = `You are an expert pet adoption matchmaker. Your task is to evaluate the compatibility between a potential adopter and a pet by analyzing the provided pet details, adopter preferences, and interaction history.
 
-Scoring Guidelines:
-1. Use the full range of scores (1-100) with a balanced distribution
-2. Avoid extreme low scores (<20) unless there are severe incompatibilities
-3. Consider each factor independently before combining
-4. Most matches should fall in the 40-80 range
-5. Factor weights:
-   - Species alignment (15%)
-   - Breed compatibility (15%)
-   - Size alignment (10%)
-   - Activity level and living space (15%)
-   - Experience and care requirements (15%)
-   - Age and location preferences (15%)
-   - Lifestyle compatibility (10%)
-   - Historical preference alignment (5%)
+Core Matching Philosophy:
+1. Focus on potential for success rather than perfect matches
+2. Consider adaptability of both pet and adopter
+3. Value enthusiasm and willingness to learn
+4. Recognize that preferences can be flexible
+5. Acknowledge that great bonds can form despite initial preference mismatches
 
-Breed Compatibility Analysis:
-- Consider breed-specific needs (exercise, grooming, training)
-- Factor in breed temperament with living situation
-- Evaluate breed-specific health considerations
-- Match breed energy levels to activity preferences
-- Account for breed size variations within size categories
+Factor Weights (Base Scoring):
+- Species/Type Match: 15 points
+- Size Compatibility: 15 points
+- Activity & Space Match: 20 points
+- Experience Level: 15 points
+- Age & Health Match: 15 points
+- Lifestyle Compatibility: 20 points
 
-Scoring Bands and Examples:
-1-20: Severe Incompatibility (Rare)
-- Wrong species AND completely incompatible size
-- Breed requires expertise far beyond experience level
-- Multiple major lifestyle conflicts
+Bonus Points (Up to +15):
+- Previous success with similar pets (+5)
+- Strong interest in breed/species (+3)
+- Willingness to learn/adapt (+3)
+- Support system available (+2)
+- Close to pet's location (+2)
 
-21-40: Basic Compatibility
-- Correct species but breed needs don't align
-- Some experience concerns with high-maintenance breed
-- Several compromises needed
+Penalty Points (Up to -15):
+- Hard restrictions that can't be overcome (-5)
+- Previous negative experiences (-5)
+- Incompatible living situation (-5)
 
-41-60: Moderate Match (Common)
-- Most basic requirements met
-- Breed maintenance level matches experience
-- Average compatibility in key areas
-- Typical first-time pet owner match
+Score Distribution:
+90-100: Perfect Match (10%)
+80-89: Excellent Match (20%)
+70-79: Very Good Match (25%)
+60-69: Good Match (25%)
+50-59: Fair Match (15%)
+30-49: Challenging Match (5%)
 
-61-80: Good Match (Common)
-- Strong compatibility in most areas
-- Breed temperament suits lifestyle
-- Good experience level for breed needs
-- Positive interaction patterns
-- Similar to previous successful adoptions
-
-81-90: Excellent Match (Regular)
-- Very strong compatibility
-- Breed-specific needs well matched
-- Great experience level
-- Location and lifestyle align well
-- Strong historical preference patterns
-
-91-100: Perfect Match (Occasional)
-- Exceptional compatibility across all factors
-- Ideal breed match for preferences
-- Perfect lifestyle fit
-- Proven success with similar breeds
-- Outstanding experience level
-
-Granularity Rules:
-1. Two pets should NEVER get the same score unless EXACTLY identical in ALL aspects
-2. Even minor breed differences should affect the score
-3. Each difference in traits must impact the score by at least 1 point
-4. Consider decimal points for extremely close matches
-5. Factor in subtle breed variations within same species
-
-Remember:
-- Most matches should fall between 40-80
-- Scores below 20 should be rare
-- Don't be overly harsh - focus on potential for success
-- Consider positive factors as much as negative ones
-- Every breed has unique characteristics that affect matching
-
-Output only a number between 1 and 100, with no additional text.`;
+Output only a number between 30 and 100, with no additional text.`;
 
 // Helper function to analyze interaction patterns
 async function analyzeInteractionPatterns(
@@ -221,30 +181,20 @@ Interaction History Analysis:
 - Similar to Favorited Pets: ${patterns.favoritePatterns}
 - Similar to Disliked Pets: ${patterns.dislikePatterns}`;
 
-    // Log the complete prompt being sent to the API
-    console.log('🤖 Sending prompt to AI:');
-    console.log('=== SYSTEM PROMPT ===');
-    console.log(SYSTEM_PROMPT);
-    console.log('=== PET INFO ===');
-    console.log(petInfo);
-
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: petInfo }
       ],
-      temperature: 0.1,
+      temperature: 0.7,
       max_tokens: 3,
-      presence_penalty: -0.5,
-      frequency_penalty: 0,
+      presence_penalty: 0.1,
+      frequency_penalty: 0.1,
     });
 
     const scoreText = response.choices[0].message.content?.trim() || '50';
     const score = parseFloat(scoreText);
-
-    // Log the score
-    console.log('🔍 Match Score:', score);
     
     // Validate the score
     if (isNaN(score)) {

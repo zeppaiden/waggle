@@ -38,7 +38,6 @@ const AuthContext = createContext<AuthContextType>({
  * @returns {React.ReactNode} The AuthProvider component.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  console.log('[AuthProvider] Rendering provider');
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isOnboarded, setIsOnboarded] = useState(false);
@@ -46,33 +45,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [tempRegistration, setTempRegistration] = useState<TempRegistration | null>(null);
 
   useEffect(() => {
-    console.log('[AuthProvider] Setting up auth state listener');
     let isMounted = true;
     
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('[AuthProvider] Auth state changed:', {
-        email: user?.email,
-        uid: user?.uid,
-        isNewUser: user?.metadata.creationTime === user?.metadata.lastSignInTime
-      });
-      
       if (!isMounted) return;
       setUser(user);
       
       if (user) {
         try {
-          console.log('[AuthProvider] Fetching user document');
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           const exists = userDoc.exists();
           const userData = userDoc.data();
-          
-          console.log('[AuthProvider] User document check:', {
-            exists,
-            data: userData,
-            previousOnboardingState: isOnboarded,
-            willSetOnboardedTo: exists,
-            hasCompletedTutorial: userData?.hasCompletedTutorial,
-          });
           
           if (isMounted) {
             setIsOnboarded(exists);
@@ -80,7 +63,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsLoading(false);
           }
         } catch (error) {
-          console.error('[AuthProvider] Error checking user document:', error);
           if (isMounted) {
             setIsOnboarded(false);
             setHasCompletedTutorial(false);
@@ -88,7 +70,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } else {
-        console.log('[AuthProvider] No user, resetting states');
         if (isMounted) {
           setIsOnboarded(false);
           setHasCompletedTutorial(false);
@@ -98,28 +79,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
-      console.log('[AuthProvider] Cleaning up auth state listener');
       isMounted = false;
       unsubscribe();
     };
   }, []);
 
   const completeRegistration = async (profile: UserProfile) => {
-    console.log('[AuthProvider] Starting registration completion');
     if (!tempRegistration) {
-      console.error('[AuthProvider] No temporary registration data found');
       throw new Error('No temporary registration data found');
     }
 
     try {
-      console.log('[AuthProvider] Creating Firebase user');
       const { user } = await createUserWithEmailAndPassword(
         auth,
         tempRegistration.email,
         tempRegistration.password
       );
 
-      console.log('[AuthProvider] Creating user profile in Firestore');
       await setDoc(doc(db, 'users', user.uid), {
         ...profile,
         email: tempRegistration.email,
@@ -127,12 +103,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updatedAt: new Date().toISOString(),
       });
 
-      console.log('[AuthProvider] Registration completed successfully');
       setTempRegistration(null);
       setIsOnboarded(true);
       setUser(user);
     } catch (error) {
-      console.error('[AuthProvider] Error completing registration:', error);
       throw error;
     }
   };

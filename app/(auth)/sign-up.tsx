@@ -5,6 +5,9 @@ import { Link, router } from 'expo-router';
 import { Colors } from '@/constants/colors-theme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/contexts/auth';
+import { fetchSignInMethodsForEmail } from 'firebase/auth';
+import { auth, db } from '@/configs/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 interface ValidationErrors {
   email?: string;
@@ -92,16 +95,62 @@ export default function SignUp() {
         return;
       }
 
+      const trimmedEmail = email.trim().toLowerCase();
+      
+      try {
+        // Check if email exists in Firebase Auth
+        const signInMethods = await fetchSignInMethodsForEmail(auth, trimmedEmail);
+        
+        if (signInMethods && signInMethods.length > 0) {
+          setErrors(prev => ({
+            ...prev,
+            email: 'This email is already registered'
+          }));
+          return;
+        }
+
+        // Check if email exists in Firestore
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('email', '==', trimmedEmail));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          setErrors(prev => ({
+            ...prev,
+            email: 'This email is already registered'
+          }));
+          return;
+        }
+
+      } catch (authError: any) {
+        // Check if it's an auth/invalid-email error
+        if (authError.code === 'auth/invalid-email') {
+          setErrors(prev => ({
+            ...prev,
+            email: 'Invalid email format'
+          }));
+        } else {
+          setErrors(prev => ({
+            ...prev,
+            email: 'Error checking email availability'
+          }));
+        }
+        return;
+      }
+
       // Store temporary registration data
       setTempRegistration({
-        email: email.trim(),
+        email: trimmedEmail,
         password: password.trim(),
       });
 
       // Navigate to onboarding
       router.push('/onboarding');
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      Alert.alert(
+        'Error',
+        error.message || 'An error occurred during sign up. Please try again.'
+      );
     } finally {
       setLoading(false);
     }

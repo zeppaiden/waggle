@@ -48,7 +48,6 @@ function VideoCard({ videoUrl }: VideoCardProps) {
   }, [videoUrl]);
 
   const handleError = useCallback((error: string | undefined) => {
-    console.error('Error loading video:', videoUrl, error);
     setHasError(true);
     setIsVideoLoaded(false);
   }, [videoUrl]);

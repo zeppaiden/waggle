@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Pressable, SafeAreaView } from 'react-native';
+import { View, StyleSheet, Pressable, SafeAreaView, ScrollView } from 'react-native';
 import { Text } from '@/components/themed';
 import { UserProfile, UserRole } from '@/types/user';
 import { Colors } from '@/constants/colors-theme';
@@ -49,7 +49,11 @@ export default function RoleSelectionStep({ data, onNext, onBack }: RoleSelectio
         </Pressable>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.title}>How would you like to use Waggle?</Text>
         <Text style={styles.subtitle}>Choose your primary role</Text>
 
@@ -60,22 +64,8 @@ export default function RoleSelectionStep({ data, onNext, onBack }: RoleSelectio
             description="Browse available pets and find your perfect match"
             icon="heart-outline"
           />
-
-          <RoleCard
-            role="owner"
-            title="I have pets to rehome"
-            description="List your pets and find them loving homes"
-            icon="paw-outline"
-          />
-
-          <RoleCard
-            role="both"
-            title="Both"
-            description="I want to both adopt and list pets"
-            icon="sync-outline"
-          />
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -109,7 +99,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
     padding: 24,
+    paddingBottom: 48,
   },
   title: {
     fontSize: 28,

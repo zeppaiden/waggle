@@ -29,30 +29,17 @@ export default function TutorialCard({
   onSkip,
   isLast = false,
 }: TutorialCardProps) {
-  console.log('[TutorialCard] Rendering card:', {
-    title,
-    index,
-    totalSteps,
-    isLast,
-  });
-
   useEffect(() => {
-    console.log('[TutorialCard] Card mounted:', { index });
     return () => {
-      console.log('[TutorialCard] Card unmounting:', { index });
+      // Cleanup if needed
     };
   }, [index]);
 
   const handleNext = () => {
-    console.log('[TutorialCard] Next button pressed:', {
-      index,
-      isLast,
-    });
     onNext();
   };
 
   const handleSkip = () => {
-    console.log('[TutorialCard] Skip button pressed');
     onSkip();
   };
 

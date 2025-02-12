@@ -82,7 +82,6 @@ function TypingIndicator() {
 }
 
 export default function ChatDetailScreen() {
-  console.log('[ChatDetail] Screen mounted');
   const params = useLocalSearchParams();
   const colorScheme = useColorScheme();
   const theme = colorScheme ?? 'light';
@@ -152,7 +151,6 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     if (!chatId || !user) return;
 
-    console.log('[ChatDetail] Setting up messages listener');
     const uniqueChatId = generateChatId(user.uid, chatId);
     const messagesRef = collection(db, 'messages');
     const messagesQuery = query(
@@ -168,11 +166,6 @@ export default function ChatDetailScreen() {
         timestamp: doc.data().timestamp?.toDate() || new Date(),
       })) as Message[];
 
-      console.log('[ChatDetail] Received messages update:', {
-        count: newMessages.length,
-        lastMessage: newMessages[newMessages.length - 1]?.text
-      });
-
       setMessages(newMessages);
       
       // Update message history for AI context
@@ -185,12 +178,11 @@ export default function ChatDetailScreen() {
       setIsLoading(false);
       setTimeout(() => scrollToBottom(), 100);
     }, (error) => {
-      console.error('[ChatDetail] Error subscribing to messages:', error);
+      console.error('] Error subscribing to messages:', error);
       setIsLoading(false);
     });
 
     return () => {
-      console.log('[ChatDetail] Cleaning up messages listener');
       unsubscribe();
     };
   }, [chatId, user]);
@@ -224,7 +216,6 @@ export default function ChatDetailScreen() {
         participants: [user.uid, 'mock-owner-id'],
       };
 
-      console.log('[ChatDetail] Sending message:', messageData);
       await addDoc(collection(db, 'messages'), messageData);
       setNewMessage('');
       scrollToBottom();
@@ -253,7 +244,6 @@ export default function ChatDetailScreen() {
         
         await addDoc(collection(db, 'messages'), responseData);
       } catch (error) {
-        console.error('[ChatDetail] Error generating AI response:', error);
         // Send fallback message if AI fails
         const fallbackData = {
           text: `I apologize, but I'm having trouble responding right now. Please try again in a moment.`,
@@ -270,7 +260,6 @@ export default function ChatDetailScreen() {
       }
 
     } catch (error) {
-      console.error('[ChatDetail] Error sending message:', error);
       setIsTyping(false);
     }
   };
@@ -286,7 +275,6 @@ export default function ChatDetailScreen() {
       }
       setIsFavorited(!isFavorited);
     } catch (error) {
-      console.error('[ChatDetail] Error toggling favorite:', error);
     }
   };
 

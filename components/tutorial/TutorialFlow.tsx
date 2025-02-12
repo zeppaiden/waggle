@@ -43,54 +43,30 @@ interface TutorialFlowProps {
 }
 
 export default function TutorialFlow({ onComplete }: TutorialFlowProps) {
-  console.log('[TutorialFlow] Rendering component');
   const [currentStep, setCurrentStep] = useState(0);
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
 
   useEffect(() => {
-    console.log('[TutorialFlow] Component mounted');
     return () => {
-      console.log('[TutorialFlow] Component unmounting');
+      // Cleanup if needed
     };
   }, []);
 
-  useEffect(() => {
-    console.log('[TutorialFlow] Current step changed:', {
-      currentStep,
-      stepTitle: TUTORIAL_STEPS[currentStep].title,
-      isNavigatingBack,
-    });
-  }, [currentStep, isNavigatingBack]);
-
   const handleNext = () => {
-    console.log('[TutorialFlow] handleNext called:', {
-      currentStep,
-      isLastStep: currentStep === TUTORIAL_STEPS.length - 1,
-    });
-
     if (currentStep === TUTORIAL_STEPS.length - 1) {
-      console.log('[TutorialFlow] Completing tutorial');
       onComplete();
     } else {
-      console.log('[TutorialFlow] Moving to next step');
       setIsNavigatingBack(false);
       setCurrentStep(prev => prev + 1);
     }
   };
 
   const handleSkip = () => {
-    console.log('[TutorialFlow] handleSkip called');
     onComplete();
   };
 
   const entering = isNavigatingBack ? SlideInLeft : SlideInRight;
   const exiting = isNavigatingBack ? SlideOutRight : SlideOutLeft;
-
-  console.log('[TutorialFlow] Rendering step:', {
-    currentStep,
-    totalSteps: TUTORIAL_STEPS.length,
-    isNavigatingBack,
-  });
 
   return (
     <View style={styles.container}>

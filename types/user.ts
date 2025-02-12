@@ -1,4 +1,4 @@
-export type PetType = 'DOG' | 'CAT' | 'BIRD' | 'RABBIT' | 'FISH' | 'OTHER';
+export type PetType = 'DOG' | 'CAT' | 'BIRD' | 'RABBIT' | 'FISH' | 'ANY';
 export type SizePreference = 'small' | 'medium' | 'large' | 'any';
 export type ActivityLevel = 'low' | 'moderate' | 'high' | 'any';
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'expert';

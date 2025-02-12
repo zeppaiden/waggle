@@ -14,7 +14,7 @@ interface OwnerProfileStepProps {
   onBack: () => void;
 }
 
-const PET_TYPES: PetType[] = ['DOG', 'CAT', 'BIRD', 'RABBIT', 'FISH', 'OTHER'];
+const PET_TYPES: PetType[] = ['DOG', 'CAT', 'BIRD', 'RABBIT', 'FISH', 'ANY'];
 
 export default function OwnerProfileStep({ data, onNext, onBack }: OwnerProfileStepProps) {
   const [petData, setPetData] = useState({

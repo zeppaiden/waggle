@@ -35,7 +35,6 @@ type Chat = {
 };
 
 export default function ChatScreen() {
-  console.log('[ChatList] Screen mounted');
   const colorScheme = useColorScheme();
   const theme = colorScheme ?? 'light';
   const router = useRouter();
@@ -52,30 +51,24 @@ export default function ChatScreen() {
 
   const loadPetImage = async (pet: any): Promise<string> => {
     try {
-      // Try to get photo from Firebase Storage first
       const photosRef = ref(storage, `pets/${pet.id}/photos/0.jpg`);
       try {
         const url = await getDownloadURL(photosRef);
-        console.log(`✅ Loaded avatar for pet ${pet.id} from Firebase Storage`);
         return url;
       } catch (storageError) {
-        console.log(`⚠️ Firebase Storage failed for pet ${pet.id}, trying original URL`);
-        // If Firebase Storage fails, try using the original URL
         if (pet.photos?.[0]) {
           return pet.photos[0];
         }
-        return pet.videoUrl; // Final fallback
+        return pet.videoUrl;
       }
     } catch (error) {
-      console.error(`❌ Error loading avatar for pet ${pet.id}:`, error);
-      return pet.photos?.[0] || pet.videoUrl; // Fallback to original URL
+      return pet.photos?.[0] || pet.videoUrl;
     }
   };
 
   useEffect(() => {
     if (!user) return;
 
-    console.log('[ChatList] Setting up messages listener');
     const messagesRef = collection(db, 'messages');
     const messagesQuery = query(
       messagesRef,
@@ -86,7 +79,6 @@ export default function ChatScreen() {
     );
 
     const unsubscribe = onSnapshot(messagesQuery, async (snapshot) => {
-      // Group messages by uniqueChatId to get latest message for each chat
       const chatMessages = new Map<string, Message>();
       snapshot.docs.forEach(doc => {
         const message = {
@@ -95,14 +87,12 @@ export default function ChatScreen() {
           timestamp: doc.data().timestamp?.toDate() || new Date(),
         } as Message;
 
-        // Only keep the latest message for each chat
         const existingMessage = chatMessages.get(message.uniqueChatId);
         if (!existingMessage || message.timestamp > existingMessage.timestamp) {
           chatMessages.set(message.uniqueChatId, message);
         }
       });
 
-      // Convert messages to chat objects with loading states
       const chatList = await Promise.all(
         Array.from(chatMessages.values()).map(async (message) => {
           const pet = pets.find(p => p.id === message.chatId);
@@ -122,7 +112,6 @@ export default function ChatScreen() {
             chat.petImage = await loadPetImage(pet);
             chat.imageLoading = false;
           } catch (error) {
-            console.error(`❌ Failed to load image for pet ${pet.id}:`, error);
             chat.imageLoading = false;
             chat.imageError = true;
           }
@@ -131,16 +120,13 @@ export default function ChatScreen() {
         })
       ).then(chats => chats.filter((chat): chat is Chat => chat !== null));
 
-      console.log('[ChatList] Updated chats:', { count: chatList.length });
       setChats(chatList);
       setIsLoading(false);
     }, (error) => {
-      console.error('[ChatList] Error subscribing to messages:', error);
       setIsLoading(false);
     });
 
     return () => {
-      console.log('[ChatList] Cleaning up messages listener');
       unsubscribe();
     };
   }, [user, pets]);
@@ -162,7 +148,6 @@ export default function ChatScreen() {
           onPress: async () => {
             try {
               const uniqueChatId = generateChatId(user.uid, chatId);
-              // Send final message
               const finalMessage = {
                 text: "User has left the chat",
                 senderId: user.uid,
@@ -174,7 +159,6 @@ export default function ChatScreen() {
               };
               await addDoc(collection(db, 'messages'), finalMessage);
 
-              // Delete all messages for this chat
               const messagesRef = collection(db, 'messages');
               const q = query(
                 messagesRef, 
@@ -182,13 +166,10 @@ export default function ChatScreen() {
               );
               const snapshot = await getDocs(q);
               
-              // Delete each message
               const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
               await Promise.all(deletePromises);
 
-              console.log('[ChatList] Successfully deleted chat:', chatId);
             } catch (error) {
-              console.error('[ChatList] Error deleting chat:', error);
               Alert.alert('Error', 'Failed to delete chat. Please try again.');
             }
           }
@@ -224,11 +205,6 @@ export default function ChatScreen() {
     const isPressed = pressedChatId === item.petId;
 
     const handlePress = () => {
-      console.log('[ChatList] Chat item pressed:', {
-        petId: item.petId,
-        petName: item.petName
-      });
-
       router.push({
         pathname: "/(app)/chat/[chatId]",
         params: {

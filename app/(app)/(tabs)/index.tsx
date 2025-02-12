@@ -106,7 +106,6 @@ function VideoCard({ videoUrl, shouldPlay = true, isMuted, onToggleMute }: Video
 
   const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if ('error' in status) {
-      console.error('[VideoCard] Playback error:', status.error);
       setHasError(true);
       setIsVideoLoaded(false);
       return;
@@ -114,7 +113,6 @@ function VideoCard({ videoUrl, shouldPlay = true, isMuted, onToggleMute }: Video
 
     if (status.isLoaded) {
       if (!isVideoLoaded) {
-        console.log('[VideoCard] Video loaded successfully');
         setIsVideoLoaded(true);
         setHasError(false);
       }
@@ -122,7 +120,6 @@ function VideoCard({ videoUrl, shouldPlay = true, isMuted, onToggleMute }: Video
   }, [isVideoLoaded]);
 
   const handleError = useCallback((error: string | undefined) => {
-    console.error('[VideoCard] Error loading video:', error);
     setHasError(true);
     setIsVideoLoaded(false);
   }, []);

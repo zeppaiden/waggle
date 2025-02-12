@@ -43,12 +43,12 @@ interface LivingSpaceOption {
 }
 
 const PET_TYPES: PetTypeOption[] = [
+  { value: 'ANY', Icon: PawPrint, label: 'Any' },
   { value: 'DOG', Icon: Dog, label: 'Dogs' },
   { value: 'CAT', Icon: Cat, label: 'Cats' },
   { value: 'BIRD', Icon: Bird, label: 'Birds' },
   { value: 'RABBIT', Icon: Rabbit, label: 'Rabbits' },
   { value: 'FISH', Icon: Fish, label: 'Fish' },
-  { value: 'OTHER', Icon: PawPrint, label: 'Other' },
 ];
 
 const LIVING_SPACES: LivingSpaceOption[] = [
@@ -233,8 +233,16 @@ export default function ProfileScreen() {
     setIsSaving(true);
     try {
       const docRef = doc(db, 'users', user.uid);
-      await updateDoc(docRef, editedProfile);
-      setProfile(editedProfile as UserProfile);
+      
+      // Add preferencesLastUpdated timestamp if buyer preferences were changed
+      const hasPreferencesChanged = JSON.stringify(profile?.buyerPreferences) !== JSON.stringify(editedProfile.buyerPreferences);
+      const updatedProfile = {
+        ...editedProfile,
+        ...(hasPreferencesChanged && { preferencesLastUpdated: Date.now() })
+      };
+
+      await updateDoc(docRef, updatedProfile);
+      setProfile(updatedProfile as UserProfile);
       setIsEditing(false);
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -326,9 +334,26 @@ export default function ProfileScreen() {
     
     const currentPreferences = editedProfile.buyerPreferences || defaultBuyerPreferences;
     const currentTypes = currentPreferences.petTypes;
-    const newTypes = currentTypes.includes(value)
-      ? currentTypes.filter(t => t !== value)
-      : [...currentTypes, value];
+
+    // Handle 'ANY' selection
+    if (value === 'ANY') {
+      // If ANY is being selected, set it as the only type
+      setEditedProfile(prev => ({
+        ...prev,
+        buyerPreferences: {
+          ...currentPreferences,
+          petTypes: ['ANY']
+        }
+      }));
+      return;
+    }
+
+    // If ANY was previously selected, remove it when selecting a specific type
+    const newTypes = currentTypes.includes('ANY')
+      ? [value]
+      : currentTypes.includes(value)
+        ? currentTypes.filter(t => t !== value)
+        : [...currentTypes, value];
     
     setEditedProfile(prev => ({
       ...prev,
@@ -454,7 +479,9 @@ export default function ProfileScreen() {
     if (!profile?.buyerPreferences) return null;
     
     const isSelected = isPetType
-      ? editedProfile.buyerPreferences?.petTypes?.includes(value as PetType)
+      ? editedProfile.buyerPreferences?.petTypes?.includes('ANY')
+        ? value === 'ANY' || editedProfile.buyerPreferences?.petTypes?.includes(value as PetType)
+        : editedProfile.buyerPreferences?.petTypes?.includes(value as PetType)
       : editedProfile.buyerPreferences?.livingSpace === value;
     
     return (
@@ -723,7 +750,7 @@ export default function ProfileScreen() {
                 <Text style={styles.preferenceLabel}>Distance</Text>
                 {isEditing ? (
                   <View style={styles.preferenceItem}>
-                    <Text style={styles.preferenceLabel}>Distance (miles)</Text>
+                    <Text style={styles.preferenceLabel}>Distance (km)</Text>
                     <TextInput
                       style={styles.preferenceInput}
                       value={String(editedProfile.buyerPreferences?.maxDistance ?? profile.buyerPreferences?.maxDistance ?? 50)}
@@ -738,7 +765,7 @@ export default function ProfileScreen() {
                   </View>
                 ) : (
                   <Text style={styles.preferenceValue}>
-                    {profile.buyerPreferences?.maxDistance || 50} miles
+                    {profile.buyerPreferences?.maxDistance || 50} km
                   </Text>
                 )}
               </View>
@@ -785,20 +812,32 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.preferenceItem}>
-                <Text style={styles.preferenceLabel}>Additional Information</Text>
+                <Text style={styles.preferenceLabel}>Household</Text>
                 {isEditing ? (
-                  <View style={styles.chipGroup}>
-                    {renderChip('Children', 'hasChildren', ['Yes', 'No'], getBooleanDisplayValue(profile.buyerPreferences?.hasChildren))}
-                    {renderChip('Other Pets', 'hasOtherPets', ['Yes', 'No'], getBooleanDisplayValue(profile.buyerPreferences?.hasOtherPets))}
+                  <View style={styles.householdContainer}>
+                    <View style={styles.householdItem}>
+                      <Text style={styles.householdTitle}>Children</Text>
+                      {renderChip('Children', 'hasChildren', ['Yes', 'No'], getBooleanDisplayValue(profile.buyerPreferences?.hasChildren))}
+                    </View>
+                    <View style={styles.householdItem}>
+                      <Text style={styles.householdTitle}>Other Pets</Text>
+                      {renderChip('Other Pets', 'hasOtherPets', ['Yes', 'No'], getBooleanDisplayValue(profile.buyerPreferences?.hasOtherPets))}
+                    </View>
                   </View>
                 ) : (
-                  <View>
-                    <Text style={styles.preferenceValue}>
-                      Children: {getBooleanDisplayValue(profile.buyerPreferences?.hasChildren)}
-                    </Text>
-                    <Text style={styles.preferenceValue}>
-                      Other Pets: {getBooleanDisplayValue(profile.buyerPreferences?.hasOtherPets)}
-                    </Text>
+                  <View style={styles.householdContainer}>
+                    <View style={styles.householdItem}>
+                      <Text style={styles.householdTitle}>Children</Text>
+                      <Text style={styles.preferenceValue}>
+                        {getBooleanDisplayValue(profile.buyerPreferences?.hasChildren)}
+                      </Text>
+                    </View>
+                    <View style={styles.householdItem}>
+                      <Text style={styles.householdTitle}>Other Pets</Text>
+                      <Text style={styles.preferenceValue}>
+                        {getBooleanDisplayValue(profile.buyerPreferences?.hasOtherPets)}
+                      </Text>
+                    </View>
                   </View>
                 )}
               </View>
@@ -1161,5 +1200,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 8,
     color: '#333',
+  },
+  householdContainer: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  householdItem: {
+    flex: 1,
+  },
+  householdTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  householdDescription: {
+    fontSize: 14,
+    color: '#666',
   },
 }); 

@@ -35,25 +35,21 @@ export function useMatchedPets() {
       const preferences = userData.buyerPreferences;
 
       if (!preferences) {
-        setError('User preferences not set');
+        // If no preferences, show all pets with default score
+        setMatchedPets(allPets.map(pet => ({ ...pet, matchScore: 50 })));
         setLoading(false);
         return;
       }
 
-      // Filter out pets with incompatible species
-      const compatiblePets = allPets.filter(
-        pet => ['dog', 'cat', 'other'].includes(pet.species as string)
-      ) as Pet[];
-
       // Only calculate scores for pets that don't have one
-      const petsNeedingScores = compatiblePets.filter(pet => typeof pet.matchScore === 'undefined');
+      const petsNeedingScores = allPets.filter(pet => typeof pet.matchScore === 'undefined');
       
       if (petsNeedingScores.length > 0) {
         console.log(`🔍 Calculating match scores for ${petsNeedingScores.length} new pets`);
         const updatedPets = await updatePetMatchScores(petsNeedingScores, preferences, user.uid);
         
         // Merge new scores with existing pets
-        const mergedPets = compatiblePets.map(pet => {
+        const mergedPets = allPets.map(pet => {
           const updatedPet = updatedPets.find(p => p.id === pet.id);
           return updatedPet || pet;
         });
@@ -68,7 +64,7 @@ export function useMatchedPets() {
         setMatchedPets(sortedPets);
       } else {
         // If all pets have scores, just sort them
-        const sortedPets = [...compatiblePets].sort((a, b) => {
+        const sortedPets = [...allPets].sort((a, b) => {
           const scoreA = a.matchScore ?? 0;
           const scoreB = b.matchScore ?? 0;
           return scoreB - scoreA;

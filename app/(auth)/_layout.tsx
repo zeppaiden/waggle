@@ -8,21 +8,11 @@ import { PulsingPaw } from '@/components/ui/PulsingPaw';
 type AuthSegment = 'sign-in' | 'sign-up' | 'onboarding' | 'tutorial';
 
 export default function AuthLayout() {
-  console.log('[AuthLayout] Rendering layout');
   const { user, isLoading, isOnboarded, hasCompletedTutorial, tempRegistration } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    console.log('[AuthLayout] Auth state changed:', {
-      isLoading,
-      hasUser: !!user,
-      isOnboarded,
-      hasCompletedTutorial,
-      hasTempRegistration: !!tempRegistration,
-      currentSegments: segments,
-    });
-
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
@@ -31,18 +21,9 @@ export default function AuthLayout() {
     const inTutorial = currentSegment === 'tutorial';
     const inSignIn = currentSegment === 'sign-in';
 
-    console.log('[AuthLayout] Current navigation state:', {
-      inAuthGroup,
-      currentSegment,
-      inOnboarding,
-      inTutorial,
-      inSignIn,
-    });
-
     // No user - handle unauthenticated state
     if (!user) {
       if (!inAuthGroup || (inOnboarding && !tempRegistration)) {
-        console.log('[AuthLayout] Redirecting to sign in (no user)');
         router.replace('/(auth)/sign-in');
       }
       return;
@@ -51,7 +32,6 @@ export default function AuthLayout() {
     // User exists - handle authenticated state
     if (isOnboarded && hasCompletedTutorial) {
       if (inAuthGroup) {
-        console.log('[AuthLayout] User is fully onboarded, redirecting to main app');
         router.replace('/(app)/(tabs)');
       }
       return;
@@ -60,7 +40,6 @@ export default function AuthLayout() {
     // Handle tutorial state
     if (isOnboarded && !hasCompletedTutorial) {
       if (!inTutorial) {
-        console.log('[AuthLayout] Redirecting to tutorial');
         router.replace('/(auth)/tutorial');
       }
       return;
@@ -70,7 +49,6 @@ export default function AuthLayout() {
     if (!isOnboarded) {
       // Just signed in - go directly to onboarding
       if (inSignIn) {
-        console.log('[AuthLayout] User signed in, redirecting to onboarding');
         router.replace('/(auth)/onboarding');
         return;
       }
@@ -78,10 +56,8 @@ export default function AuthLayout() {
       // Handle other onboarding cases
       if (!inOnboarding || (inOnboarding && !tempRegistration)) {
         if (!tempRegistration) {
-          console.log('[AuthLayout] No temp registration, redirecting to sign up');
           router.replace('/(auth)/sign-up');
         } else {
-          console.log('[AuthLayout] Redirecting to onboarding');
           router.replace('/(auth)/onboarding');
         }
       }
@@ -90,7 +66,6 @@ export default function AuthLayout() {
 
   // Only show loading screen when checking initial auth state
   if (isLoading) {
-    console.log('[AuthLayout] Showing loading screen');
     return (
       <View style={styles.loadingContainer}>
         <PulsingPaw size={60} backgroundColor="transparent" />
@@ -98,7 +73,6 @@ export default function AuthLayout() {
     );
   }
 
-  console.log('[AuthLayout] Rendering stack navigator');
   return (
     <Stack
       screenOptions={{
@@ -144,4 +118,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
   },
-}); 
+});

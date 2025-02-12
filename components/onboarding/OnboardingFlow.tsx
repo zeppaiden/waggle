@@ -5,7 +5,6 @@ import { UserProfile } from '@/types/user';
 import IdentificationStep from '@/components/onboarding/steps/IdentificationStep';
 import RoleSelectionStep from '@/components/onboarding/steps/RoleSelectionStep';
 import BuyerPreferencesStep from '@/components/onboarding/steps/BuyerPreferencesStep';
-import OwnerProfileStep from '@/components/onboarding/steps/OwnerProfileStep';
 import { Colors } from '@/constants/colors-theme';
 
 interface OnboardingFlowProps {
@@ -29,11 +28,6 @@ const STEPS = {
     title: 'Your Pet Preferences',
     description: 'Help us understand what kind of pets you are interested in.',
   },
-  ownerProfile: {
-    id: 'ownerProfile',
-    title: 'List Your Pet',
-    description: 'Tell us about the pet you want to rehome.',
-  },
 };
 
 export default function OnboardingFlow({ onComplete, initialData = {} }: OnboardingFlowProps) {
@@ -43,12 +37,8 @@ export default function OnboardingFlow({ onComplete, initialData = {} }: Onboard
   const getStepSequence = () => {
     const steps = [STEPS.identification, STEPS.roleSelection];
     
-    if (userData.role === 'buyer') {
+    if (userData.role === 'buyer' || userData.role === 'both') {
       steps.push(STEPS.buyerPreferences);
-    } else if (userData.role === 'owner') {
-      steps.push(STEPS.ownerProfile);
-    } else if (userData.role === 'both') {
-      steps.push(STEPS.buyerPreferences, STEPS.ownerProfile);
     }
 
     return steps;
@@ -98,14 +88,6 @@ export default function OnboardingFlow({ onComplete, initialData = {} }: Onboard
       case 'buyerPreferences':
         return (
           <BuyerPreferencesStep
-            data={userData}
-            onNext={handleNext}
-            onBack={handleBack}
-          />
-        );
-      case 'ownerProfile':
-        return (
-          <OwnerProfileStep
             data={userData}
             onNext={handleNext}
             onBack={handleBack}

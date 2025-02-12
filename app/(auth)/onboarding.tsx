@@ -16,10 +16,9 @@ import Animated, {
   SlideOutRight,
 } from 'react-native-reanimated';
 
-type OnboardingStep = 'role' | 'identification' | 'preferences' | 'owner';
+type OnboardingStep = 'role' | 'identification' | 'preferences' | 'owner-profile';
 
 export default function OnboardingScreen() {
-  console.log('[OnboardingScreen] Rendering screen');
   const { tempRegistration, completeRegistration, setTempRegistration } = useAuth();
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('role');
   const [profile, setProfile] = useState<Partial<UserProfile>>({});
@@ -27,62 +26,45 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     if (!tempRegistration) {
-      console.log('[OnboardingScreen] No registration data found, redirecting to sign up');
       router.replace('/(auth)/sign-up');
     }
   }, [tempRegistration]);
 
-  useEffect(() => {
-    console.log('[OnboardingScreen] Current step:', currentStep);
-    console.log('[OnboardingScreen] Current profile:', profile);
-  }, [currentStep, profile]);
-
   const handleNext = (data: Partial<UserProfile>) => {
-    console.log('[OnboardingScreen] Handling next with data:', data);
     const updatedProfile = { ...profile, ...data };
     setProfile(updatedProfile);
     setIsNavigatingBack(false);
 
-    // Determine next step based on current step and role
     switch (currentStep) {
       case 'role':
-        console.log('[OnboardingScreen] Moving to identification step');
         setCurrentStep('identification');
         break;
       case 'identification':
         if (updatedProfile.role === 'buyer') {
-          console.log('[OnboardingScreen] Moving to preferences step (buyer)');
           setCurrentStep('preferences');
         } else if (updatedProfile.role === 'owner') {
-          console.log('[OnboardingScreen] Moving to owner step');
-          setCurrentStep('owner');
-        } else {
-          console.log('[OnboardingScreen] Moving to preferences step (both)');
+          setCurrentStep('owner-profile');
+        } else if (updatedProfile.role === 'both') {
           setCurrentStep('preferences');
         }
         break;
       case 'preferences':
         if (updatedProfile.role === 'both') {
-          console.log('[OnboardingScreen] Moving to owner step (after preferences)');
-          setCurrentStep('owner');
+          setCurrentStep('owner-profile');
         } else {
-          console.log('[OnboardingScreen] Completing onboarding (after preferences)');
           handleComplete(updatedProfile);
         }
         break;
-      case 'owner':
-        console.log('[OnboardingScreen] Completing onboarding (after owner)');
+      case 'owner-profile':
         handleComplete(updatedProfile);
         break;
     }
   };
 
   const handleBack = () => {
-    console.log('[OnboardingScreen] Handling back');
     setIsNavigatingBack(true);
     switch (currentStep) {
       case 'role':
-        // If we're at the first step, go back to sign up
         setTempRegistration(null);
         router.replace('/(auth)/sign-up');
         break;
@@ -92,7 +74,7 @@ export default function OnboardingScreen() {
       case 'preferences':
         setCurrentStep('identification');
         break;
-      case 'owner':
+      case 'owner-profile':
         if (profile.role === 'both') {
           setCurrentStep('preferences');
         } else {
@@ -103,22 +85,24 @@ export default function OnboardingScreen() {
   };
 
   const handleComplete = async (finalProfile: Partial<UserProfile>) => {
-    console.log('[OnboardingScreen] Completing registration with profile:', finalProfile);
     try {
       if (!tempRegistration) {
-        console.error('[OnboardingScreen] No registration data found');
         throw new Error('No registration data found');
       }
 
-      await completeRegistration(finalProfile as UserProfile);
-      console.log('[OnboardingScreen] Registration completed successfully');
+      // Add preferencesLastUpdated timestamp for initial preferences
+      const profileWithTimestamp = {
+        ...finalProfile,
+        preferencesLastUpdated: Date.now()
+      };
+
+      await completeRegistration(profileWithTimestamp as UserProfile);
     } catch (error) {
-      console.error('[OnboardingScreen] Error completing registration:', error);
+      // Handle error silently or show user feedback if needed
     }
   };
 
   const renderStep = () => {
-    console.log('[OnboardingScreen] Rendering step:', currentStep);
     const entering = isNavigatingBack ? SlideInLeft : SlideInRight;
     const exiting = isNavigatingBack ? SlideOutRight : SlideOutLeft;
 
@@ -159,7 +143,7 @@ export default function OnboardingScreen() {
             />
           </Animated.View>
         );
-      case 'owner':
+      case 'owner-profile':
         return (
           <Animated.View {...props}>
             <OwnerProfileStep
@@ -170,7 +154,6 @@ export default function OnboardingScreen() {
           </Animated.View>
         );
       default:
-        console.warn('[OnboardingScreen] Unknown step:', currentStep);
         return null;
     }
   };

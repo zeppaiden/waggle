@@ -4,7 +4,7 @@ import { Colors } from '@/constants/colors-theme';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
+import { useMemo, useState, useCallback, useRef, useEffect, memo } from 'react';
 import { Pet } from '@/types/pet';
 import { useIsFocused } from '@react-navigation/native';
 import { PulsingPaw } from '@/components/ui/PulsingPaw';
@@ -14,11 +14,18 @@ import { storage } from '@/configs/firebase';
 import { ref, getDownloadURL, listAll } from 'firebase/storage';
 import { generateMatchScore } from '@/services/matching';
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
+import { getPetPhotos } from '@/services/storage';
 
 interface PetProfileProps {
   pet: Pet;
   onClose: () => void;
 }
+
+// Add global cache for pet photos
+const globalPhotoCache = new Map<string, string>();
+
+// Add global cache for match scores
+const globalMatchScoreCache = new Map<string, { score: number; timestamp: number }>();
 
 function MatchScoreIndicator({ score }: { score: number }) {
   const segments = [
@@ -150,7 +157,6 @@ function VideoPlayer({ videoUrl, thumbnailUrl }: { videoUrl: string, thumbnailUr
           setIsVideoLoaded(true);
         }
       } catch (error) {
-        console.error('[VideoPlayer] Error loading video:', error);
         if (isMounted) {
           setHasError(true);
         }
@@ -174,7 +180,6 @@ function VideoPlayer({ videoUrl, thumbnailUrl }: { videoUrl: string, thumbnailUr
       await videoRef.current.setIsMutedAsync(!isMuted);
       setIsMuted(!isMuted);
     } catch (error) {
-      console.error('[VideoPlayer] Error toggling mute:', error);
     }
   }, [isMuted, isVideoLoaded]);
 
@@ -241,6 +246,24 @@ function VideoPlayer({ videoUrl, thumbnailUrl }: { videoUrl: string, thumbnailUr
   );
 }
 
+// Memoized sub-components
+const MemoizedInterestTag = memo(({ interest }: { interest: string }) => (
+  <View style={styles.interestTag}>
+    <Text style={styles.interestText}>{interest}</Text>
+  </View>
+));
+
+const MemoizedOwnerInfo = memo(({ owner }: { owner: { name: string; verified: boolean } }) => (
+  <View style={styles.ownerContainer}>
+    <Text style={styles.detailText}>{owner.name}</Text>
+    {owner.verified && (
+      <View style={styles.verifiedBadge}>
+        <Text style={styles.verifiedText}>✓ Verified</Text>
+      </View>
+    )}
+  </View>
+));
+
 export function PetProfile({ pet, onClose }: PetProfileProps) {
   const colorScheme = useColorScheme();
   const theme = colorScheme ?? 'light';
@@ -252,115 +275,130 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const isScrolling = useRef(false);
   const scrollTimeout = useRef<NodeJS.Timeout>();
+  const preloadTimeout = useRef<NodeJS.Timeout>();
   const router = useRouter();
   const { user } = useAuth();
   const [calculatingScore, setCalculatingScore] = useState(false);
   const [currentScore, setCurrentScore] = useState<number | undefined>(pet.matchScore);
-  const [photoLoadTrigger, setPhotoLoadTrigger] = useState(0); // Force rerenders when photos load
+  const [photoLoadTrigger, setPhotoLoadTrigger] = useState(0);
+  const isMounted = useRef(true);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+      if (preloadTimeout.current) clearTimeout(preloadTimeout.current);
+    };
+  }, []);
+
+  // Memoized styles
   const containerStyle = useMemo(() => [
     styles.container,
     { backgroundColor: Colors[theme].background }
   ], [theme]);
 
-  // Optimized photo loading with lazy loading and caching
+  // Update the photo loading logic
+  const loadPhotos = useCallback(async () => {
+    if (!pet.id) return;
+    
+    try {
+      setIsLoadingPhotos(true);
+      const urls = await getPetPhotos(pet.id);
+      
+      if (urls.length > 0) {
+        urls.forEach((url, index) => {
+          photoUrlCache.current.set(index, url);
+          globalPhotoCache.set(`${pet.id}-${index}`, url);
+        });
+        setPhotoLoadTrigger(prev => prev + 1);
+      } else {
+        photoUrlCache.current.clear();
+        if (pet.photos?.length && pet.photos.some(url => url && url.startsWith('http'))) {
+          pet.photos.forEach((url, index) => {
+            if (url && url.startsWith('http')) {
+              photoUrlCache.current.set(index, url);
+              globalPhotoCache.set(`${pet.id}-${index}`, url);
+            }
+          });
+          setPhotoLoadTrigger(prev => prev + 1);
+        }
+      }
+    } catch (error) {
+      photoUrlCache.current.clear();
+      if (pet.photos?.length && pet.photos.some(url => url && url.startsWith('http'))) {
+        pet.photos.forEach((url, index) => {
+          if (url && url.startsWith('http')) {
+            photoUrlCache.current.set(index, url);
+            globalPhotoCache.set(`${pet.id}-${index}`, url);
+          }
+        });
+        setPhotoLoadTrigger(prev => prev + 1);
+      }
+    } finally {
+      setIsLoadingPhotos(false);
+    }
+  }, [pet.id, pet.photos]);
+
+  // Replace the existing loadPhoto function with a simpler version for preloading
   const loadPhoto = useCallback(async (index: number) => {
     if (!pet.photos?.length || index >= pet.photos.length) return;
     if (photoUrlCache.current.has(index)) return;
 
-    console.log(`🔍 Loading photo ${index} for pet ${pet.id}`);
+    const globalCacheKey = `${pet.id}-${index}`;
+    const cachedUrl = globalPhotoCache.get(globalCacheKey);
     
-    try {
-      // Try to get photo from Firebase Storage first
-      const photosRef = ref(storage, `pets/${pet.id}/photos/${index}.jpg`);
-      let url;
-      
-      try {
-        url = await getDownloadURL(photosRef);
-        console.log(`✅ Loaded photo ${index} from Firebase Storage`);
-      } catch (storageError) {
-        console.log(`⚠️ Firebase Storage failed for photo ${index}, trying original URL`);
-        // If Firebase Storage fails, try using the original URL
-        url = pet.photos[index];
-      }
-
-      if (!url) {
-        console.log(`⚠️ No valid URL found for photo ${index}`);
-        return;
-      }
-
-      photoUrlCache.current.set(index, url);
-      // Force a rerender when new photo is loaded
+    if (cachedUrl) {
+      photoUrlCache.current.set(index, cachedUrl);
       setPhotoLoadTrigger(prev => prev + 1);
-      console.log(`✨ Photo ${index} cached successfully`);
-    } catch (error) {
-      console.error(`❌ Error loading photo ${index}:`, error);
     }
   }, [pet.id, pet.photos]);
 
-  // Load initial photos
+  // Add useEffect to load photos on mount
   useEffect(() => {
-    const loadInitialPhotos = async () => {
-      console.log('🔄 Starting initial photo load');
-      setIsLoadingPhotos(true);
-      
-      if (!pet.photos?.length) {
-        console.log('⚠️ No photos available for pet');
-        setIsLoadingPhotos(false);
-        return;
-      }
+    loadPhotos();
+  }, [loadPhotos]);
 
-      try {
-        console.log(`📸 Loading first ${Math.min(2, pet.photos.length)} photos`);
-        // Load first two photos (or all if less than 2)
-        const initialIndexes = Array.from(
-          { length: Math.min(2, pet.photos.length) }, 
-          (_, i) => i
-        );
-        await Promise.all(initialIndexes.map(index => loadPhoto(index)));
-      } catch (error) {
-        console.error('❌ Error loading initial photos:', error);
-      } finally {
-        console.log('✅ Initial photo loading complete');
-        setIsLoadingPhotos(false);
-      }
-    };
-
-    loadInitialPhotos();
-  }, [loadPhoto, pet.photos]);
-
-  // Handle photo scroll and lazy loading
+  // Optimized scroll handler with debouncing
   const handlePhotoScroll = useCallback((event: any) => {
-    if (!pet.photos?.length || isScrolling.current) return;
+    if (!pet.photos?.length) return;
 
-    isScrolling.current = true;
+    // Persist the event to prevent it from being nullified
+    event.persist();
+
+    // Extract values immediately before debouncing
+    const offset = event.nativeEvent?.contentOffset?.x ?? 0;
+    const width = event.nativeEvent?.layoutMeasurement?.width ?? 0;
+
+    // Skip if we don't have valid measurements
+    if (!width) return;
+
+    // Clear existing timeout
     if (scrollTimeout.current) {
       clearTimeout(scrollTimeout.current);
     }
 
+    // Set new timeout
     scrollTimeout.current = setTimeout(() => {
-      isScrolling.current = false;
+      const currentIndex = Math.floor(offset / width);
+      
+      // Validate index before proceeding
+      if (currentIndex < 0 || currentIndex >= pet.photos.length) return;
+      
+      // Load next photos ahead
+      const nextIndexes = [currentIndex + 1, currentIndex + 2].filter(
+        i => i < pet.photos.length && !photoUrlCache.current.has(i)
+      );
+      
+      if (nextIndexes.length > 0) {
+        nextIndexes.forEach(loadPhoto);
+      }
     }, 150);
-
-    const offset = event.nativeEvent.contentOffset.x;
-    const width = event.nativeEvent.layoutMeasurement.width;
-    const currentIndex = Math.floor(offset / width);
-    
-    // Load next two photos ahead
-    const nextIndexes = [currentIndex + 2, currentIndex + 3].filter(
-      i => i < pet.photos.length && !photoUrlCache.current.has(i)
-    );
-    
-    if (nextIndexes.length > 0) {
-      console.log(`🔄 Loading next photos: ${nextIndexes.join(', ')}`);
-      nextIndexes.forEach(loadPhoto);
-    }
   }, [pet.photos, loadPhoto]);
 
-  // Render photos using cached URLs
+  // Memoized photo renderer
   const renderPhotos = useMemo(() => {
     if (!pet.photos?.length) {
-      console.log('⚠️ No photos to render');
       return null;
     }
 
@@ -373,13 +411,13 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
           key={`${index}-${url}`}
           source={{ uri: url }}
           style={styles.photo}
+          defaultSource={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' }}
         />
       );
     }).filter(Boolean);
 
-    console.log(`📸 Rendering ${photos.length} photos`);
     return photos;
-  }, [pet.photos, photoLoadTrigger]); // Rerender when photos load
+  }, [pet.photos, photoLoadTrigger]);
 
   const handleStartChat = () => {
     if (!user || !pet) return;
@@ -402,41 +440,61 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
   // Calculate match score based on current preferences
   useEffect(() => {
     const calculateScore = async () => {
-      if (!user) return;
+      if (!user || !pet.id) return;
       
       try {
         setCalculatingScore(true);
         
-        // Get current user preferences
+        // Check if we have a cached score
+        const cachedScore = globalMatchScoreCache.get(pet.id);
+        
+        // Get current user preferences and their last update timestamp
         const db = getFirestore();
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         
         if (!userDoc.exists()) {
-          console.log('⚠️ User preferences not found');
           return;
         }
 
-        const preferences = userDoc.data().buyerPreferences;
+        const userData = userDoc.data();
+        const preferences = userData.buyerPreferences;
+        const preferencesLastUpdated = userData.preferencesLastUpdated || 0;
+
         if (!preferences) {
-          console.log('⚠️ No buyer preferences set');
+          return;
+        }
+
+        // Use cached score if preferences haven't been updated since last calculation
+        if (cachedScore && preferencesLastUpdated <= cachedScore.timestamp) {
+          setCurrentScore(cachedScore.score);
+          setCalculatingScore(false);
           return;
         }
 
         // Generate new match score with current preferences
         const newScore = await generateMatchScore(pet, preferences, user.uid);
+        
+        // Cache the new score with current timestamp
+        globalMatchScoreCache.set(pet.id, {
+          score: newScore,
+          timestamp: Date.now()
+        });
+
         setCurrentScore(newScore);
       } catch (error) {
-        console.error('❌ Error calculating match score:', error);
       } finally {
         setCalculatingScore(false);
       }
     };
 
     calculateScore();
-  }, [user, pet]);
+  }, [user, pet.id]);
 
   return (
-    <ScrollView style={containerStyle}>
+    <ScrollView 
+      style={containerStyle}
+      removeClippedSubviews={true}
+    >
       <View style={styles.videoContainer}>
         <Pressable 
           style={styles.backButton}
@@ -486,9 +544,7 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
           <Text style={styles.sectionTitle}>Interests</Text>
           <View style={styles.interestsContainer}>
             {pet.interests.map((interest, index) => (
-              <View key={index} style={styles.interestTag}>
-                <Text style={styles.interestText}>{interest}</Text>
-              </View>
+              <MemoizedInterestTag key={index} interest={interest} />
             ))}
           </View>
         </View>
@@ -502,6 +558,12 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
             style={styles.photosContainer}
             onScroll={handlePhotoScroll}
             scrollEventThrottle={16}
+            removeClippedSubviews={true}
+            onScrollBeginDrag={() => {
+              if (scrollTimeout.current) {
+                clearTimeout(scrollTimeout.current);
+              }
+            }}
           >
             {isLoadingPhotos ? (
               <View style={styles.loadingPhotoContainer}>
@@ -520,14 +582,7 @@ export function PetProfile({ pet, onClose }: PetProfileProps) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Owner</Text>
-          <View style={styles.ownerContainer}>
-            <Text style={styles.detailText}>{pet.owner.name}</Text>
-            {pet.owner.verified && (
-              <View style={styles.verifiedBadge}>
-                <Text style={styles.verifiedText}>✓ Verified</Text>
-              </View>
-            )}
-          </View>
+          <MemoizedOwnerInfo owner={pet.owner} />
         </View>
 
         <Pressable 
@@ -729,7 +784,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: 'absolute',
-    top: 60,
+    top: 16,
     left: 16,
     zIndex: 10,
     width: 40,

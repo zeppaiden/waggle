@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { Text } from '@/components/themed';
 import { UserProfile } from '@/types/user';
 import { Colors } from '@/constants/colors-theme';
 import { ArrowLeft } from 'lucide-react-native';
 import { Pressable } from 'react-native';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/configs/firebase';
+import debounce from 'lodash/debounce';
 
 interface IdentificationStepProps {
   data: Partial<UserProfile>;
@@ -20,8 +23,105 @@ export default function IdentificationStep({ data, onNext, onBack }: Identificat
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
 
-  const validate = () => {
+  const validateUsername = async (username: string) => {
+    // Basic format validation
+    if (!username.trim()) {
+      setErrors(prev => ({ ...prev, username: 'Username is required' }));
+      return false;
+    }
+
+    console.log('🔍 Validating username:', username);
+
+    // Length check (3-20 characters)
+    if (username.length < 3 || username.length > 20) {
+      console.log('⚠️ Username length invalid');
+      setErrors(prev => ({ ...prev, username: 'Username must be between 3 and 20 characters' }));
+      return false;
+    }
+
+    // Only allow letters, numbers, underscores, and dots
+    const validUsernameRegex = /^[a-zA-Z0-9._]+$/;
+    if (!validUsernameRegex.test(username)) {
+      console.log('⚠️ Username contains invalid characters');
+      setErrors(prev => ({ 
+        ...prev, 
+        username: 'Username can only contain letters, numbers, dots, and underscores' 
+      }));
+      return false;
+    }
+
+    // Must start with a letter
+    if (!/^[a-zA-Z]/.test(username)) {
+      console.log('⚠️ Username must start with a letter');
+      setErrors(prev => ({ 
+        ...prev, 
+        username: 'Username must start with a letter' 
+      }));
+      return false;
+    }
+
+    // No consecutive dots or underscores
+    if (/[._]{2,}/.test(username)) {
+      console.log('⚠️ Username has consecutive dots or underscores');
+      setErrors(prev => ({ 
+        ...prev, 
+        username: 'Username cannot contain consecutive dots or underscores' 
+      }));
+      return false;
+    }
+
+    // Cannot end with a dot or underscore
+    if (/[._]$/.test(username)) {
+      console.log('⚠️ Username ends with dot or underscore');
+      setErrors(prev => ({ 
+        ...prev, 
+        username: 'Username cannot end with a dot or underscore' 
+      }));
+      return false;
+    }
+
+    setIsCheckingUsername(true);
+    try {
+      console.log('🔍 Checking username availability in Firestore');
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('username', '==', username.toLowerCase()));
+      const querySnapshot = await getDocs(q);
+      
+      console.log('📝 Found matches:', querySnapshot.size);
+      if (!querySnapshot.empty) {
+        console.log('⚠️ Username is taken');
+        setErrors(prev => ({ ...prev, username: 'Username is already taken' }));
+        return false;
+      }
+      
+      console.log('✅ Username is available');
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.username;
+        return newErrors;
+      });
+      return true;
+    } catch (error) {
+      console.error('❌ Error checking username:', error);
+      setErrors(prev => ({ ...prev, username: 'Error checking username availability' }));
+      return false;
+    } finally {
+      setIsCheckingUsername(false);
+    }
+  };
+
+  const handleUsernameChange = (text: string) => {
+    // Remove spaces and special characters in real-time
+    const sanitizedUsername = text.replace(/[^a-zA-Z0-9._]/g, '').toLowerCase();
+    setFormData(prev => ({ ...prev, username: sanitizedUsername }));
+    debouncedUsernameCheck(sanitizedUsername);
+  };
+
+  const debouncedUsernameCheck = debounce(validateUsername, 500);
+
+  const validate = async () => {
     const newErrors: Record<string, string> = {};
 
     if (!formData.firstName.trim()) {
@@ -30,16 +130,18 @@ export default function IdentificationStep({ data, onNext, onBack }: Identificat
     if (!formData.lastName.trim()) {
       newErrors.lastName = 'Last name is required';
     }
-    if (!formData.username.trim()) {
-      newErrors.username = 'Username is required';
+
+    const isUsernameValid = await validateUsername(formData.username);
+    if (!isUsernameValid) {
+      return false;
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = () => {
-    if (validate()) {
+  const handleNext = async () => {
+    if (await validate()) {
       onNext({
         ...data,
         ...formData,
@@ -100,14 +202,19 @@ export default function IdentificationStep({ data, onNext, onBack }: Identificat
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Username</Text>
-              <TextInput
-                style={[styles.input, errors.username && styles.inputError]}
-                value={formData.username}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, username: text }))}
-                placeholder="Choose a username"
-                autoCapitalize="none"
-                returnKeyType="done"
-              />
+              <View style={styles.usernameInputContainer}>
+                <TextInput
+                  style={[styles.usernameInput, errors.username && styles.inputError]}
+                  value={formData.username}
+                  onChangeText={handleUsernameChange}
+                  placeholder="Choose a username"
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                />
+                {isCheckingUsername && (
+                  <ActivityIndicator size="small" color={Colors.light.primary} style={styles.usernameLoader} />
+                )}
+              </View>
               {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
             </View>
           </View>
@@ -220,5 +327,22 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  usernameInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 56,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+  },
+  usernameInput: {
+    flex: 1,
+    fontSize: 16,
+  },
+  usernameLoader: {
+    marginLeft: 8,
   },
 }); 
